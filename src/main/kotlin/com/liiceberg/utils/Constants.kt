@@ -18,8 +18,8 @@ object Constants {
     }
 
     object Labels {
-        const val INCLUDE_REGEX_LABEL = "Include files regex (Java/Kotlin):"
-        const val EXCLUDE_REGEX_LABEL = "Exclude files regex (Java/Kotlin):"
+        const val INCLUDE_REGEX_LABEL = "Include files regex:"
+        const val EXCLUDE_REGEX_LABEL = "Exclude files regex:"
         const val PREFIX_LABEL = "Key prefix:"
         const val INVALID_PREFIX_FIELD = "Please enter a valid prefix"
         const val LOADING_STRINGS = "Loading Strings...This may take some time."
@@ -29,20 +29,12 @@ object Constants {
         const val INVALID_KEYS_FOUND = "Attention: incorrect keys were found. Edit them before continuing."
     }
 
-    object Path {
-        const val SOURCE_CODE_PATH = "app/src/main/java"
-        const val STRINGS_XML_PATH = "app/src/main/res/values/strings.xml"
-        const val RES_LAYOUT_PATH = "/src/main/res/layout"
-        const val RES_MENU_PATH = "/src/main/res/menu"
-    }
-
     object RegexTemplates {
         const val DEFAULT_INCLUDE_REGEX = ".*"
-        const val INCLUDE_REGEX_END = "\\.(kt|java)\$"
+        const val INCLUDE_REGEX_END = "\\.kt$"
         val PREFIX_REGEX = Regex("^[0-9a-zA-Z_]*\$")
         val KEY_REGEX = Regex("^[A-Za-z0-9-_]+$")
         val KEY_GENERATOR_REGEX = Regex("[^A-Za-z0-9_ ]")
-        val DATA_BINDING_VARIABLE_REGEX = Regex("@\\{.*}")
     }
 }
 

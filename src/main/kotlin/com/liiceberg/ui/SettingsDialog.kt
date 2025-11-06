@@ -2,14 +2,10 @@ package com.liiceberg.ui
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
 import com.liiceberg.utils.Constants
 import com.liiceberg.utils.LocalStorage
 import com.liiceberg.utils.ApplicationUtil
-import com.liiceberg.utils.files.FileUtil.getAllLayoutXMLFiles
-import com.liiceberg.utils.files.FileUtil.getAllSrcJavaFiles
-import com.liiceberg.utils.files.FileUtil.getAllSrcKotlinFiles
 import com.liiceberg.utils.toRegexOrNull
 import java.awt.Dimension
 import javax.swing.*
@@ -98,19 +94,7 @@ class SettingsDialog(private val project: Project) : DialogWrapper(project) {
         LocalStorage.setData(Constants.Preferences.EXCLUDE_REGEX, excludeRegex)
         LocalStorage.setData(Constants.Preferences.IMPORT_PACKAGE, ApplicationUtil.findApplicationId(project) ?: "")
 
-
-        val allFiles = mutableListOf<VirtualFile>()
-        allFiles.addAll(getAllSrcJavaFiles(project) ?: emptyList())
-        allFiles.addAll(getAllSrcKotlinFiles(project) ?: emptyList())
-
-        val filteredFiles = allFiles.filter { file ->
-            val name = file.name
-            val includeMatch = includeRegex.toRegexOrNull()?.matches(name) ?: true
-            val excludeMatch = excludeRegex.toRegexOrNull()?.matches(name) ?: false
-            includeMatch && !excludeMatch
-        }
-
-        FoundStringDialog(project, filteredFiles + getAllLayoutXMLFiles(project)).show()
+//        FoundStringDialog(project, filesList).show()
         super.doOKAction()
     }
 

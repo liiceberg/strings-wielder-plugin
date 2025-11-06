@@ -11,10 +11,6 @@ import com.intellij.ui.table.JBTable
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 import com.liiceberg.utils.strings.StringResourceReplacer
-import com.liiceberg.utils.strings.StringResourcesProcessor
-import com.liiceberg.utils.files.FileUtil.getStringXMLFiles
-import com.liiceberg.utils.strings.finder.KotlinAndJavaHardCodedStringFinder
-import com.liiceberg.utils.strings.finder.XmlHardCodedStringFinder
 import java.awt.BorderLayout
 import java.awt.Dimension
 import javax.swing.*
@@ -27,8 +23,7 @@ class FoundStringDialog(
 ) : DialogWrapper(project) {
 
     private val psiManager = PsiManager.getInstance(project)
-    private val stringXMLFile = getStringXMLFiles(project)
-    private val entries = processAllFilesAndGetEntries(fileList, stringXMLFile)
+    private val entries = processAllFilesAndGetEntries(fileList)
     private val tableModel = FoundStringTableModel(entries)
     private val stringsTable = JBTable(tableModel)
     private val errorLabel = JLabel("").apply {
@@ -45,25 +40,24 @@ class FoundStringDialog(
         if (errorLabel.text.isNotEmpty()) return
 
         ApplicationManager.getApplication().invokeLater {
-            StringResourceReplacer(entries, stringXMLFile).replace()
+//            StringResourceReplacer(entries, stringXMLFile).replace()
             super.doOKAction()
         }
     }
 
     private fun processAllFilesAndGetEntries(
         files: List<VirtualFile>,
-        stringXMLFile: VirtualFile
     ): List<HardcodedStringEntity> {
         val entries = mutableListOf<HardcodedStringEntity>()
         files.forEach { virtualFile ->
             psiManager.findFile(virtualFile)?.let { psiFile ->
                 if (psiFile.isWritable) {
-                    val finder = when {
-                        psiFile.name.endsWith(".xml") -> XmlHardCodedStringFinder()
-                        else -> KotlinAndJavaHardCodedStringFinder()
-                    }
-                    val hardcodedTexts = finder.findHardCodedStrings(psiFile)
-                    entries.addAll(StringResourcesProcessor.process(hardcodedTexts, virtualFile, stringXMLFile))
+//                    val finder = when {
+//                        psiFile.name.endsWith(".xml") -> ManifestHardCodedStringFinder()
+//                        else -> KotlinHardCodedStringFinder(project = )
+//                    }
+//                    val hardcodedTexts = finder.findHardCodedStrings(psiFile)
+//                    entries.addAll(StringResourcesProcessor.process(hardcodedTexts, virtualFile, stringXMLFile))
                 }
             }
         }

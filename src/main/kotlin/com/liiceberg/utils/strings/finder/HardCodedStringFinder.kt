@@ -1,29 +1,26 @@
 package com.liiceberg.utils.strings.finder
 
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiManager
 import com.liiceberg.utils.files.FileProcessor
-import com.liiceberg.utils.files.FileProcessor.readFileContent
 
-abstract class HardCodedStringFinder {
+abstract class HardCodedStringFinder(project: Project) {
 
-    fun findHardCodedStrings(psiFile: PsiFile): List<String> {
+    private val psiManager = PsiManager.getInstance(project)
 
+    fun findHardCodedStrings(virtualFile: VirtualFile): List<String> {
         FileProcessor.saveAllFile()
 
-        val content = readFileContent(psiFile.virtualFile)
-        val result = regex().findAll(content)
-
-        return result
-                .map { extractHardCodedString(it.value) }
-                .filter { shouldInclude(it) }
-                .toList()
-
+        psiManager.findFile(virtualFile)?.let { psiFile ->
+            if (psiFile.isWritable) {
+                return extractHardCodedString(psiFile)
+            }
+        }
+        return emptyList()
     }
 
-    protected abstract fun extractHardCodedString(it: String): String
-
-    protected abstract fun regex(): Regex
-
-    protected abstract fun shouldInclude(it: String): Boolean
+    protected abstract fun extractHardCodedString(file: PsiFile): List<String>
 
 }
