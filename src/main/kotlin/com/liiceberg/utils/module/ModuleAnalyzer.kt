@@ -14,7 +14,9 @@ class ModuleAnalyzer(project: Project) {
     private val stringFinder = KotlinHardCodedStringFinder(project)
 
     fun analyzeAllModules(): List<ModuleContent> {
-        return moduleExplorer.getAndroidModules().map { analyzeModule(it) }
+        return moduleExplorer.getAndroidModules().map {
+            analyzeModule(it)
+        }
     }
 
     fun analyzeModuleByName(moduleName: String): ModuleContent? {
@@ -25,7 +27,7 @@ class ModuleAnalyzer(project: Project) {
         val kotlinFiles = ModuleFileFinder.getModuleKotlinFiles(module)
         val strings = kotlinFiles.map {
             val strings = extractStringsFromFile(it)
-            FileStrings(it.name, strings)
+            FileStrings(it, strings)
         }
         return ModuleContent(
             module = module,

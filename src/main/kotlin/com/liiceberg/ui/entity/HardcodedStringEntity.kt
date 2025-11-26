@@ -7,5 +7,4 @@ data class HardcodedStringEntity(
     var value: String,
     var isSelected: Boolean,
     var virtualFile: VirtualFile,
-    var extractTemplate: String = "",
 )

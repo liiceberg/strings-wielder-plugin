@@ -3,8 +3,6 @@ package com.liiceberg.ui
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
@@ -16,14 +14,12 @@ import java.awt.Dimension
 import javax.swing.*
 import javax.swing.table.TableCellRenderer
 
-
 class FoundStringDialog(
     project: Project,
-    fileList: List<VirtualFile>,
+    private val entries: List<HardcodedStringEntity>,
 ) : DialogWrapper(project) {
 
-    private val psiManager = PsiManager.getInstance(project)
-    private val entries = processAllFilesAndGetEntries(fileList)
+    private val replacer =  StringResourceReplacer(project, entries)
     private val tableModel = FoundStringTableModel(entries)
     private val stringsTable = JBTable(tableModel)
     private val errorLabel = JLabel("").apply {
@@ -40,28 +36,9 @@ class FoundStringDialog(
         if (errorLabel.text.isNotEmpty()) return
 
         ApplicationManager.getApplication().invokeLater {
-//            StringResourceReplacer(entries, stringXMLFile).replace()
+            replacer.replace()
             super.doOKAction()
         }
-    }
-
-    private fun processAllFilesAndGetEntries(
-        files: List<VirtualFile>,
-    ): List<HardcodedStringEntity> {
-        val entries = mutableListOf<HardcodedStringEntity>()
-        files.forEach { virtualFile ->
-            psiManager.findFile(virtualFile)?.let { psiFile ->
-                if (psiFile.isWritable) {
-//                    val finder = when {
-//                        psiFile.name.endsWith(".xml") -> ManifestHardCodedStringFinder()
-//                        else -> KotlinHardCodedStringFinder(project = )
-//                    }
-//                    val hardcodedTexts = finder.findHardCodedStrings(psiFile)
-//                    entries.addAll(StringResourcesProcessor.process(hardcodedTexts, virtualFile, stringXMLFile))
-                }
-            }
-        }
-        return entries
     }
 
     override fun createCenterPanel(): JComponent {

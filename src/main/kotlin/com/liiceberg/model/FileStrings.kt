@@ -1,6 +1,8 @@
 package com.liiceberg.model
 
+import com.intellij.openapi.vfs.VirtualFile
+
 data class FileStrings(
-    val filename: String,
+    val file: VirtualFile,
     val strings: List<String>,
 )

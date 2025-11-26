@@ -5,4 +5,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "android-strings-plagin"
+rootProject.name = "android-strings-plugin"
