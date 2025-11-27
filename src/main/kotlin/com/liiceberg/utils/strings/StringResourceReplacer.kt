@@ -10,8 +10,8 @@ import com.liiceberg.utils.LocalStorage
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.resolve.ImportPath
-
 
 class StringResourceReplacer(private val project: Project, private val entries: List<HardcodedStringEntity>) {
 
@@ -21,26 +21,27 @@ class StringResourceReplacer(private val project: Project, private val entries: 
     fun replace() {
         ApplicationManager.getApplication().runReadAction {
             val importsList = getRequiredImports()
-            entries.filter { it.isSelected }.forEach {
-                psiManager.findFile(it.virtualFile)?.let { psiFile ->
+            entries.filter { it.isSelected }.groupBy { it.virtualFile }.forEach { (file, entityList) ->
+                psiManager.findFile(file)?.let { psiFile ->
                     psiFile as KtFile
                     addImports(importsList, psiFile)
-                    replaceInKotlinFile(it.key, it.value, psiFile)
+                    val stringsToReplace = buildMap { entityList.forEach { put(it.value, it.key) } }
+                    replaceInKotlinFile(stringsToReplace,psiFile)
                 }
             }
             updateStringXMLFile()
         }
     }
 
-    private fun replaceInKotlinFile(key: String, value: String, ktFile: KtFile) {
+    private fun replaceInKotlinFile(stringsToReplace: Map<String, String>, ktFile: KtFile) {
         WriteCommandAction.runWriteCommandAction(project) {
-            ktFile.accept(object : org.jetbrains.kotlin.psi.KtTreeVisitorVoid() {
+            ktFile.accept(object : KtTreeVisitorVoid() {
                 override fun visitStringTemplateExpression(expression: KtStringTemplateExpression) {
                     super.visitStringTemplateExpression(expression)
 
                     val text = expression.text.trim('"')
-                    if (text == value) {
-                        val resourceAccess = STRING_RESOURCE_TEMPLATE.format(key)
+                    if (stringsToReplace.containsKey(text)) {
+                        val resourceAccess = STRING_RESOURCE_TEMPLATE.format(stringsToReplace[text])
                         expression.replace(
                             ktPsiFactory.createExpression(resourceAccess)
                         )
@@ -48,10 +49,6 @@ class StringResourceReplacer(private val project: Project, private val entries: 
                 }
             })
         }
-    }
-
-    private fun updateStringXMLFile() {
-
     }
 
     @Suppress("UnstableApiUsage")
@@ -80,12 +77,19 @@ class StringResourceReplacer(private val project: Project, private val entries: 
         }
     }
 
-    private fun getRequiredImports() : List<String> {
+    private fun getRequiredImports(): List<String> {
         return buildList {
             add(STRING_RESOURCE_IMPORT)
             LocalStorage.getData(Constants.Preferences.IMPORT_PACKAGE)?.let {
                 add(RESOURCES_IMPORT_TEMPLATE.format(it))
             }
+        }
+    }
+
+    private fun updateStringXMLFile() {
+        entries.filter { it.isSelected }.groupBy { it.module }.forEach { (module, entityList) ->
+            val newStringResources = buildMap { entityList.forEach { put(it.key, it.value) } }
+            StringsXmlManager(project, module, newStringResources).update()
         }
     }
 

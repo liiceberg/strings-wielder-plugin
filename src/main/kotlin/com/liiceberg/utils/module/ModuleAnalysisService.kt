@@ -1,7 +1,7 @@
 package com.liiceberg.utils.module
 
 import com.intellij.openapi.project.Project
-import com.liiceberg.model.FileStrings
+import com.liiceberg.model.ModuleContent
 import com.liiceberg.ui.FoundStringDialog
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.strings.StringResourcesProcessor
@@ -16,20 +16,21 @@ object ModuleAnalysisService {
             val stringResources = StringResourceFinder
                 .getModuleStrings(moduleContent.module)
                 ?.assetSets
-                ?.map { it.name } ?: emptyList()
-            getEntries(moduleContent.strings, stringResources)
+                ?.map { it.name }
+                ?.toSet() ?: emptySet()
+            getEntries(moduleContent, stringResources)
         }
         FoundStringDialog(project, entries).show()
     }
 
     private fun getEntries(
-        files: List<FileStrings>,
-        stringResources: List<String>,
+        moduleContent: ModuleContent,
+        stringResources: Set<String>,
     ): List<HardcodedStringEntity> {
         val entries = mutableListOf<HardcodedStringEntity>()
         val processor = StringResourcesProcessor(stringResources)
-        files.forEach {
-            entries.addAll(processor.process(it.strings, it.file))
+        moduleContent.strings.forEach {
+            entries.addAll(processor.process(it.strings, it.file, moduleContent.module))
         }
         return entries
     }

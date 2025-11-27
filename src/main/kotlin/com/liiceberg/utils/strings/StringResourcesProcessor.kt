@@ -1,14 +1,16 @@
 package com.liiceberg.utils.strings
 
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.vfs.VirtualFile
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 
-class StringResourcesProcessor(private val stringResources: List<String>) {
+class StringResourcesProcessor(private val stringResources: Set<String>) {
 
     fun process(
         hardcodedStrings: List<String>,
         virtualFile: VirtualFile,
+        module: Module,
     ): List<HardcodedStringEntity> {
         val keysToAddInStringXML = mutableListOf<String>()
         val entries = mutableListOf<HardcodedStringEntity>()
@@ -22,6 +24,7 @@ class StringResourcesProcessor(private val stringResources: List<String>) {
                     str,
                     true,
                     virtualFile,
+                    module,
                 )
             )
         }
