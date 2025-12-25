@@ -1,4 +1,4 @@
-package com.liiceberg.utils.strings
+package com.liiceberg.strings
 
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.vfs.VirtualFile

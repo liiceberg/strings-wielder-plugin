@@ -8,7 +8,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
-import com.liiceberg.utils.strings.StringResourceReplacer
+import com.liiceberg.strings.StringResourceReplacer
 import java.awt.BorderLayout
 import java.awt.Dimension
 import javax.swing.*

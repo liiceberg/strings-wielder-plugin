@@ -26,4 +26,5 @@ dependencies {
         bundledPlugin("org.jetbrains.android")
         androidStudio(property("ideVersion").toString())
     }
+    implementation("me.xdrop:fuzzywuzzy:1.4.0")
 }

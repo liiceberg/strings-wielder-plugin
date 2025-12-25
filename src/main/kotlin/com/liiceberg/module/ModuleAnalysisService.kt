@@ -1,16 +1,19 @@
-package com.liiceberg.utils.module
+package com.liiceberg.module
 
 import com.intellij.openapi.project.Project
 import com.liiceberg.model.ModuleContent
+import com.liiceberg.strings.SearchUtil
+import com.liiceberg.strings.StringResourcesProcessor
+import com.liiceberg.strings.finder.StringResourceFinder
 import com.liiceberg.ui.FoundStringDialog
 import com.liiceberg.ui.entity.HardcodedStringEntity
-import com.liiceberg.utils.strings.StringResourcesProcessor
-import com.liiceberg.utils.strings.finder.StringResourceFinder
 
-object ModuleAnalysisService {
+class ModuleAnalysisService(private val project: Project) {
 
-    fun performAnalysis(project: Project) {
-        val analyzer = ModuleAnalyzer(project)
+    private val searchUtil = SearchUtil(project)
+    private val analyzer = ModuleAnalyzer(project)
+
+    fun performAnalysis() {
         val analyzeResults = analyzer.analyzeAllModules()
         val entries = analyzeResults.flatMap { moduleContent ->
             val stringResources = StringResourceFinder
@@ -31,8 +34,15 @@ object ModuleAnalysisService {
         val processor = StringResourcesProcessor(stringResources)
         moduleContent.strings.forEach {
             entries.addAll(processor.process(it.strings, it.file, moduleContent.module))
+            it.strings.forEach { str -> printDuplicates(str) }
         }
         return entries
+    }
+
+    private fun printDuplicates(string: String) {
+        println("string: $string")
+        println(searchUtil.search(string)?.tag?.value?.text)
+        println(searchUtil.fuzzySearch(string).map { it.tag.value.text })
     }
 
 }

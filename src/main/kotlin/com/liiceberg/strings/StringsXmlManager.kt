@@ -1,4 +1,4 @@
-package com.liiceberg.utils.strings
+package com.liiceberg.strings
 
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.module.Module
@@ -7,7 +7,7 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.xml.XmlFile
 import com.intellij.psi.xml.XmlTag
-import com.liiceberg.utils.module.ModuleFileFinder
+import com.liiceberg.module.ModuleFileFinder
 
 class StringsXmlManager(
     private val project: Project,
@@ -34,12 +34,12 @@ class StringsXmlManager(
     private fun addOrUpdateString(rootTag: XmlTag, key: String, value: String) {
         WriteCommandAction.runWriteCommandAction(project) {
             val existingTag = rootTag.findSubTags(STRING_TAG).firstOrNull {
-                it.getAttributeValue(TAG_ATTRIBUTE_NAME) == key
+                it.getAttributeValue(NAME_TAG_ATTRIBUTE) == key
             }
 
             if (existingTag == null) {
                 val newTag = rootTag.createChildTag(STRING_TAG, rootTag.namespace, value, false)
-                newTag.setAttribute(TAG_ATTRIBUTE_NAME, key)
+                newTag.setAttribute(NAME_TAG_ATTRIBUTE, key)
                 rootTag.addSubTag(newTag, false)
             }
         }
@@ -55,9 +55,9 @@ class StringsXmlManager(
         }
     }
 
-    private companion object {
-        const val RESOURCES_TAG = "resources"
+    companion object {
+        private const val RESOURCES_TAG = "resources"
         const val STRING_TAG = "string"
-        const val TAG_ATTRIBUTE_NAME = "name"
+        private const val NAME_TAG_ATTRIBUTE = "name"
     }
 }

@@ -1,4 +1,4 @@
-package com.liiceberg.utils.module
+package com.liiceberg.module
 
 import com.android.tools.idea.projectsystem.getManifestFiles
 import com.android.tools.idea.ui.resourcemanager.importer.getOrCreateDefaultResDirectory

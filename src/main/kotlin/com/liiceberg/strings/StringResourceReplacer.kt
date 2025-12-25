@@ -1,4 +1,4 @@
-package com.liiceberg.utils.strings
+package com.liiceberg.strings
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction

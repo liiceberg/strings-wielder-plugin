@@ -1,5 +1,7 @@
-package com.liiceberg.utils.module
+package com.liiceberg.module
 
+import com.android.tools.idea.projectsystem.gradle.isAndroidTestModule
+import com.android.tools.idea.projectsystem.gradle.isUnitTestModule
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
@@ -25,6 +27,6 @@ class ModuleExplorer(project: Project) {
     }
 
     private fun isAndroidModule(module: Module): Boolean {
-        return module.getFacet() != null
+        return module.getFacet() != null && !module.isUnitTestModule() && !module.isAndroidTestModule()
     }
 }

@@ -1,4 +1,4 @@
-package com.liiceberg.utils.strings.finder
+package com.liiceberg.strings.finder
 
 import com.android.resources.ResourceType
 import com.android.tools.idea.ui.resourcemanager.model.ResourceSection

@@ -1,4 +1,4 @@
-package com.liiceberg.utils.strings.finder
+package com.liiceberg.strings.finder
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
