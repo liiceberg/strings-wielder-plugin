@@ -6,16 +6,18 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
-import com.liiceberg.ui.entity.HardcodedStringEntity
-import com.liiceberg.utils.Constants
 import com.liiceberg.strings.StringResourceReplacer
+import com.liiceberg.ui.entity.HardcodedStringEntity
+import com.liiceberg.ui.entity.SuggestionType
+import com.liiceberg.utils.Constants
 import java.awt.BorderLayout
+import java.awt.Component
 import java.awt.Dimension
 import javax.swing.*
 import javax.swing.table.TableCellRenderer
 
 class FoundStringDialog(
-    project: Project,
+    private val project: Project,
     private val entries: List<HardcodedStringEntity>,
 ) : DialogWrapper(project) {
 
@@ -58,26 +60,40 @@ class FoundStringDialog(
             }
 
             columnModel.getColumn(2).apply {
-                val editorCheckBox = JCheckBox().apply {
-                    horizontalAlignment = SwingConstants.CENTER
-                }
-                cellEditor = DefaultCellEditor(editorCheckBox)
+                cellRenderer = object : JCheckBox(), TableCellRenderer {
 
-                cellRenderer = TableCellRenderer { table, value, isSelected, _, row, column ->
-                    JCheckBox().apply {
-                        setSelected(value as? Boolean ?: false)
+                    init {
                         horizontalAlignment = SwingConstants.CENTER
                         isOpaque = true
+                    }
+
+                    override fun getTableCellRendererComponent(
+                        table: JTable,
+                        value: Any?,
+                        isSelected: Boolean,
+                        hasFocus: Boolean,
+                        row: Int,
+                        column: Int
+                    ): Component {
+                        this.isSelected = value as? Boolean ?: false
                         background = if (isSelected) table.selectionBackground else table.background
-                        isEnabled = table.isEnabled
-                        border = BorderFactory.createEmptyBorder(
-                            0,
-                            (table.getCellRect(row, column, false).width - preferredSize.width) / 2,
-                            0,
-                            0
-                        )
+                        return this
                     }
                 }
+                val checkBoxEditor = JCheckBox().apply {
+                    horizontalAlignment = SwingConstants.CENTER
+                    isOpaque = true
+                }
+                cellEditor = DefaultCellEditor(checkBoxEditor)
+            }
+
+            stringsTable.columnModel.getColumn(3).cellRenderer = SuggestionCellRenderer()
+
+            stringsTable.columnModel.getColumn(4).apply {
+                cellRenderer = ActionButtonRenderer()
+                cellEditor = ActionButtonEditor(this@FoundStringDialog)
+                minWidth = 100
+                maxWidth = 120
             }
 
             setDefaultEditor(String::class.java, object : DefaultCellEditor(JTextField()) {
@@ -111,4 +127,28 @@ class FoundStringDialog(
         }
 
     }
+
+    fun onActionClicked(row: Int) {
+        val entity = entries[row]
+
+        when {
+            SuggestionType.PLURAL in entity.suggestions -> {
+                PluralDialog(project, entity).show()
+                entity.suggestions.remove(SuggestionType.PLURAL)
+            }
+
+            SuggestionType.DUPLICATE in entity.suggestions -> {
+                DuplicateDialog(project, entity).show()
+                entity.suggestions.remove(SuggestionType.DUPLICATE)
+            }
+
+            SuggestionType.TEMPLATE in entity.suggestions -> {
+                TemplateConfirmDialog(project, entity).show()
+                entity.suggestions.remove(SuggestionType.TEMPLATE)
+            }
+        }
+
+        tableModel.fireTableRowsUpdated(row, row)
+    }
+
 }

@@ -1,9 +1,13 @@
 package com.liiceberg.strings
 
+import ai.grazie.text.TextRange
+import ai.grazie.text.replace
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
+import com.liiceberg.model.StringResource
+import com.liiceberg.strings.detector.PatternType
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 import com.liiceberg.utils.LocalStorage
@@ -20,12 +24,28 @@ class StringResourceReplacer(private val project: Project, private val entries: 
 
     fun replace() {
         ApplicationManager.getApplication().runReadAction {
-            val importsList = getRequiredImports()
             entries.filter { it.isSelected }.groupBy { it.virtualFile }.forEach { (file, entityList) ->
+
+                val importsList = mutableListOf<String>()
+                getImportR()?.let { importsList.add(it) }
+                if (entityList.any { it.pluralForm != null }) {
+                    importsList.add(PLURAL_RESOURCE_IMPORT)
+                }
+                if (!entityList.all { it.pluralForm != null }) {
+                    importsList.add(STRING_RESOURCE_IMPORT)
+                }
+
                 psiManager.findFile(file)?.let { psiFile ->
                     psiFile as KtFile
                     addImports(importsList, psiFile)
-                    val stringsToReplace = buildMap { entityList.forEach { put(it.value, it.key) } }
+                    val stringsToReplace = buildMap {
+                        entityList.forEach { entity ->
+                            entity.patterns.filter { it.type == PatternType.TEMPLATE }.forEach { pattern ->
+                                entity.value.replace(TextRange(pattern.range.first, pattern.range.last), "%s")
+                            }
+                            put(entity.value, entity)
+                        }
+                    }
                     replaceInKotlinFile(stringsToReplace,psiFile)
                 }
             }
@@ -33,7 +53,7 @@ class StringResourceReplacer(private val project: Project, private val entries: 
         }
     }
 
-    private fun replaceInKotlinFile(stringsToReplace: Map<String, String>, ktFile: KtFile) {
+    private fun replaceInKotlinFile(stringsToReplace: Map<String, HardcodedStringEntity>, ktFile: KtFile) {
         WriteCommandAction.runWriteCommandAction(project) {
             ktFile.accept(object : KtTreeVisitorVoid() {
                 override fun visitStringTemplateExpression(expression: KtStringTemplateExpression) {
@@ -41,7 +61,14 @@ class StringResourceReplacer(private val project: Project, private val entries: 
 
                     val text = expression.text.trim('"')
                     if (stringsToReplace.containsKey(text)) {
-                        val resourceAccess = STRING_RESOURCE_TEMPLATE.format(stringsToReplace[text])
+                        val entity = stringsToReplace.getValue(text)
+                        entity.patterns
+                        val resourceAccess = if (entity.pluralForm != null) {
+                            val number = entity.pluralForm?.currentNumber ?: 1
+                            PLURAL_RESOURCE_TEMPLATE.format(entity.key, number)
+                        } else {
+                            STRING_RESOURCE_TEMPLATE.format(entity.key)
+                        }
                         expression.replace(
                             ktPsiFactory.createExpression(resourceAccess)
                         )
@@ -77,25 +104,30 @@ class StringResourceReplacer(private val project: Project, private val entries: 
         }
     }
 
-    private fun getRequiredImports(): List<String> {
-        return buildList {
-            add(STRING_RESOURCE_IMPORT)
-            LocalStorage.getData(Constants.Preferences.IMPORT_PACKAGE)?.let {
-                add(RESOURCES_IMPORT_TEMPLATE.format(it))
+    private fun getImportR(): String? {
+        return LocalStorage.getData(Constants.Preferences.IMPORT_PACKAGE)?.let {
+                RESOURCES_IMPORT_TEMPLATE.format(it)
             }
-        }
+
     }
 
     private fun updateStringXMLFile() {
         entries.filter { it.isSelected }.groupBy { it.module }.forEach { (module, entityList) ->
-            val newStringResources = buildMap { entityList.forEach { put(it.key, it.value) } }
+            val newStringResources = buildMap {
+                entityList.forEach {
+                    put(it.key, it.pluralForm ?: StringResource(it.value))
+                }
+            }
             StringsXmlManager(project, module, newStringResources).update()
         }
     }
 
     private companion object {
         const val STRING_RESOURCE_TEMPLATE = "stringResource(R.string.%s)"
+        const val STRING_RESOURCE_WITH_ARGS_TEMPLATE = "stringResource(R.string.%s, %s)"
+        const val PLURAL_RESOURCE_TEMPLATE = "pluralStringResource(R.plurals.%s, %d)"
         const val STRING_RESOURCE_IMPORT = "androidx.compose.ui.res.stringResource"
+        const val PLURAL_RESOURCE_IMPORT = "androidx.compose.ui.res.pluralStringResource"
         const val RESOURCES_IMPORT_TEMPLATE = "%s.R"
     }
 }

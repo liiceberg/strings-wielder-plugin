@@ -3,7 +3,7 @@ package com.liiceberg.module
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.liiceberg.model.FileStrings
+import com.liiceberg.model.FileContent
 import com.liiceberg.model.ModuleContent
 import com.liiceberg.strings.finder.KotlinHardCodedStringFinder
 
@@ -26,7 +26,7 @@ class ModuleAnalyzer(project: Project) {
         val kotlinFiles = ModuleFileFinder.getModuleKotlinFiles(module)
         val strings = kotlinFiles.map {
             val strings = extractStringsFromFile(it)
-            FileStrings(it, strings)
+            FileContent(it, strings)
         }
         return ModuleContent(
             module = module,

@@ -24,6 +24,7 @@ object Constants {
     object RegexTemplates {
         val KEY_REGEX = Regex("^[a-z0-9-_]+$")
         val KEY_GENERATOR_REGEX = Regex("[^A-Za-z0-9_ ]")
+        val DIGIT_REGEX = Regex("\\d+")
     }
 }
 
