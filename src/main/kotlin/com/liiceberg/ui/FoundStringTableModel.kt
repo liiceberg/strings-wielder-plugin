@@ -1,5 +1,6 @@
 package com.liiceberg.ui
 
+import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.ui.entity.SuggestionType
 import javax.swing.table.AbstractTableModel
@@ -8,9 +9,16 @@ class FoundStringTableModel(
     private val entries: List<HardcodedStringEntity>
 ) : AbstractTableModel() {
 
-    private val colNames = arrayOf("Key", "Value", "Add to strings.xml", "Suggestions", "Action")
+    private val colNames = arrayOf("Key", "Value", "Language", "Add to strings.xml", "Suggestions", "Action")
     private val colClasses =
-        arrayOf(String::class.java, String::class.java, Boolean::class.java, String::class.java, String::class.java)
+        arrayOf(
+            String::class.java,
+            String::class.java,
+            Any::class.java,
+            Boolean::class.java,
+            String::class.java,
+            String::class.java
+        )
 
     override fun getRowCount(): Int = entries.size
 
@@ -19,9 +27,10 @@ class FoundStringTableModel(
     override fun getValueAt(rowIndex: Int, columnIndex: Int): Any? = when (columnIndex) {
         0 -> entries[rowIndex].key
         1 -> entries[rowIndex].value
-        2 -> entries[rowIndex].isSelected
-        3 -> buildSuggestionText(entries[rowIndex])
-        4 -> buildActionText(entries[rowIndex])
+        2 -> entries[rowIndex].sourceLanguage
+        3 -> entries[rowIndex].isSelected
+        4 -> buildSuggestionText(entries[rowIndex])
+        5 -> buildActionText(entries[rowIndex])
         else -> null
     }
 
@@ -30,14 +39,15 @@ class FoundStringTableModel(
     override fun getColumnClass(columnIndex: Int): Class<*> = colClasses[columnIndex]
 
     override fun isCellEditable(rowIndex: Int, columnIndex: Int): Boolean {
-        return columnIndex != 3
+        return columnIndex != 4
     }
 
     override fun setValueAt(aValue: Any?, rowIndex: Int, columnIndex: Int) {
         when (columnIndex) {
             0 -> entries[rowIndex].key = aValue as String
             1 -> entries[rowIndex].value = aValue as String
-            2 -> entries[rowIndex].isSelected = aValue as Boolean
+            2 -> entries[rowIndex].sourceLanguage = aValue as? SupportedAppLanguage
+            3 -> entries[rowIndex].isSelected = aValue as Boolean
         }
         fireTableCellUpdated(rowIndex, columnIndex)
     }

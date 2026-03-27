@@ -27,4 +27,8 @@ dependencies {
         androidStudio(property("ideVersion").toString())
     }
     implementation("me.xdrop:fuzzywuzzy:1.4.0")
+
+    implementation("com.github.pemistahl:lingua:1.2.2")
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 }

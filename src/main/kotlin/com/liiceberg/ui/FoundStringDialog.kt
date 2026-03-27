@@ -1,12 +1,15 @@
 package com.liiceberg.ui
 
-import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
 import com.liiceberg.strings.StringResourceReplacer
+import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.ui.entity.SuggestionType
 import com.liiceberg.utils.Constants
@@ -14,6 +17,7 @@ import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Dimension
 import javax.swing.*
+import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableCellRenderer
 
 class FoundStringDialog(
@@ -37,10 +41,23 @@ class FoundStringDialog(
 
         if (errorLabel.text.isNotEmpty()) return
 
-        ApplicationManager.getApplication().invokeLater {
-            replacer.replace()
-            super.doOKAction()
-        }
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Extracting string resources", false) {
+            override fun run(indicator: com.intellij.openapi.progress.ProgressIndicator) {
+                replacer.replace()
+            }
+
+            override fun onSuccess() {
+                close(OK_EXIT_CODE)
+            }
+
+            override fun onThrowable(error: Throwable) {
+                Messages.showErrorDialog(
+                    project,
+                    error.message ?: "Failed to extract string resources.",
+                    "String-Wielder"
+                )
+            }
+        })
     }
 
     override fun createCenterPanel(): JComponent {
@@ -60,6 +77,47 @@ class FoundStringDialog(
             }
 
             columnModel.getColumn(2).apply {
+                minWidth = 150
+                maxWidth = 220
+                cellRenderer = object : DefaultTableCellRenderer() {
+                    override fun getTableCellRendererComponent(
+                        table: JTable,
+                        value: Any?,
+                        isSelected: Boolean,
+                        hasFocus: Boolean,
+                        row: Int,
+                        column: Int
+                    ): Component {
+                        super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
+                        text = (value as? SupportedAppLanguage)?.displayName ?: UNKNOWN_LANGUAGE_LABEL
+                        return this
+                    }
+                }
+                cellEditor = DefaultCellEditor(
+                    JComboBox(
+                        arrayOf<SupportedAppLanguage?>(
+                            null,
+                            *SupportedAppLanguage.dropdownValues.toTypedArray()
+                        )
+                    ).apply {
+                        renderer = object : DefaultListCellRenderer() {
+                            override fun getListCellRendererComponent(
+                                list: JList<*>?,
+                                value: Any?,
+                                index: Int,
+                                isSelected: Boolean,
+                                cellHasFocus: Boolean
+                            ): Component {
+                                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                                text = (value as? SupportedAppLanguage)?.displayName ?: UNKNOWN_LANGUAGE_LABEL
+                                return this
+                            }
+                        }
+                    }
+                )
+            }
+
+            columnModel.getColumn(3).apply {
                 cellRenderer = object : JCheckBox(), TableCellRenderer {
 
                     init {
@@ -87,9 +145,9 @@ class FoundStringDialog(
                 cellEditor = DefaultCellEditor(checkBoxEditor)
             }
 
-            stringsTable.columnModel.getColumn(3).cellRenderer = SuggestionCellRenderer()
+            stringsTable.columnModel.getColumn(4).cellRenderer = SuggestionCellRenderer()
 
-            stringsTable.columnModel.getColumn(4).apply {
+            stringsTable.columnModel.getColumn(5).apply {
                 cellRenderer = ActionButtonRenderer()
                 cellEditor = ActionButtonEditor(this@FoundStringDialog)
                 minWidth = 100
@@ -149,6 +207,10 @@ class FoundStringDialog(
         }
 
         tableModel.fireTableRowsUpdated(row, row)
+    }
+
+    private companion object {
+        const val UNKNOWN_LANGUAGE_LABEL = "Unknown"
     }
 
 }

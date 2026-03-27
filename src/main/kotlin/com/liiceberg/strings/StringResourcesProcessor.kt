@@ -2,6 +2,7 @@ package com.liiceberg.strings
 
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.vfs.VirtualFile
+import com.liiceberg.strings.translator.LanguageDetector
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 
@@ -25,6 +26,7 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
                     true,
                     virtualFile,
                     module,
+                    sourceLanguage = LanguageDetector.detect(str),
                 )
             )
         }
