@@ -8,7 +8,7 @@ import com.liiceberg.strings.translator.model.TranslateRequest
 class Translator {
     private val cache = mutableMapOf<TranslationCacheKey, String>()
 
-    private suspend fun translate(
+    suspend fun translate(
         text: String,
         sourceLanguage: SupportedAppLanguage,
         targetLanguage: SupportedAppLanguage,
