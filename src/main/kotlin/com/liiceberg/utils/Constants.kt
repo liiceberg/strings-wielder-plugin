@@ -9,6 +9,7 @@ object Constants {
         const val STRING_WIELDER_PREFERENCES = "STRING_WIELDER_PREFERENCES"
         const val IMPORT_PACKAGE = "IMPORT_PACKAGE"
         const val LOCAL_STORAGE = "LOCAL_STORAGE"
+        const val BASE_LANGUAGE = "BASE_LANGUAGE"
     }
 
     object Titles {
@@ -27,4 +28,3 @@ object Constants {
         val DIGIT_REGEX = Regex("\\d+")
     }
 }
-

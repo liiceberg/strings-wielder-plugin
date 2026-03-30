@@ -3,6 +3,7 @@ package com.liiceberg.ui
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
@@ -13,10 +14,12 @@ import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.ui.entity.SuggestionType
 import com.liiceberg.utils.Constants
+import com.liiceberg.utils.LocalStorage
 import kotlinx.coroutines.runBlocking
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Dimension
+import java.awt.FlowLayout
 import javax.swing.*
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableCellRenderer
@@ -26,9 +29,15 @@ class FoundStringDialog(
     private val entries: List<HardcodedStringEntity>,
 ) : DialogWrapper(project) {
 
-    private val replacer =  StringResourceReplacer(project, entries)
     private val tableModel = FoundStringTableModel(entries)
     private val stringsTable = JBTable(tableModel)
+    private val baseLanguageComboBox = ComboBox(
+        SupportedAppLanguage.baseLanguageValues.toTypedArray()
+    ).apply {
+        selectedItem = getSavedBaseLanguage()
+        preferredSize = Dimension(220, preferredSize.height)
+        maximumSize = Dimension(220, preferredSize.height)
+    }
     private val errorLabel = JLabel("").apply {
         foreground = JBColor.RED
     }
@@ -42,6 +51,10 @@ class FoundStringDialog(
 
         if (errorLabel.text.isNotEmpty()) return
 
+        val baseLanguage = baseLanguageComboBox.selectedItem as? SupportedAppLanguage
+            ?: SupportedAppLanguage.ENGLISH
+        LocalStorage.setData(Constants.Preferences.BASE_LANGUAGE, baseLanguage.name)
+
         super.doOKAction()
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Extracting string resources", true) {
@@ -49,7 +62,7 @@ class FoundStringDialog(
                 indicator.isIndeterminate = true
                 indicator.text = "Extracting string resources"
                 runBlocking {
-                    replacer.replace { description ->
+                    StringResourceReplacer(project, entries, baseLanguage).replace { description ->
                         indicator.text = "Translating localized resources"
                         indicator.text2 = "Translating: ${description.take(80)}"
                     }
@@ -71,6 +84,12 @@ class FoundStringDialog(
         panel.minimumSize = Dimension(800, 600)
 
         errorLabel.border = BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        val controlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+            border = BorderFactory.createEmptyBorder(10, 10, 0, 10)
+            add(JLabel("Base language for values/strings.xml"))
+            add(baseLanguageComboBox)
+            maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
+        }
 
         stringsTable.apply {
             setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
@@ -182,6 +201,8 @@ class FoundStringDialog(
             val scrollPane = JBScrollPane(stringsTable)
             val wrapper = JPanel()
             wrapper.layout = BoxLayout(wrapper, BoxLayout.Y_AXIS)
+            wrapper.add(controlsPanel)
+            wrapper.add(Box.createVerticalStrut(8))
             wrapper.add(scrollPane)
             wrapper.add(errorLabel)
 
@@ -216,7 +237,15 @@ class FoundStringDialog(
     }
 
     private companion object {
-        const val UNKNOWN_LANGUAGE_LABEL = "Unknown"
+        const val UNKNOWN_LANGUAGE_LABEL = "Unknown / choose manually"
+    }
+
+    private fun getSavedBaseLanguage(): SupportedAppLanguage {
+        val savedName = LocalStorage.getData(Constants.Preferences.BASE_LANGUAGE)
+        return savedName
+            ?.let { runCatching { SupportedAppLanguage.valueOf(it) }.getOrNull() }
+            ?.takeIf { it.isTranslatable }
+            ?: SupportedAppLanguage.ENGLISH
     }
 
 }

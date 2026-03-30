@@ -8,7 +8,9 @@ enum class SupportedAppLanguage(
     val mbartCode: String,
     val androidQualifier: String,
     val linguaLanguage: Language? = null,
+    val isTranslatable: Boolean = true,
 ) {
+    NON_TRANSLATABLE("Non-translatable", "", "", isTranslatable = false),
     AFRIKAANS("Afrikaans", "af_ZA", "af", Language.AFRIKAANS),
     ARABIC("Arabic", "ar_AR", "ar", Language.ARABIC),
     AZERBAIJANI("Azerbaijani", "az_AZ", "az", Language.AZERBAIJANI),
@@ -61,7 +63,7 @@ enum class SupportedAppLanguage(
     VIETNAMESE("Vietnamese", "vi_VN", "vi", Language.VIETNAMESE),
     XHOSA("Xhosa", "xh_ZA", "xh", Language.XHOSA);
 
-    val androidValuesDirectoryName: String = "values-$androidQualifier"
+    val androidValuesDirectoryName: String = if (androidQualifier.isBlank()) "values" else "values-$androidQualifier"
 
     override fun toString(): String = displayName
 
@@ -85,9 +87,17 @@ enum class SupportedAppLanguage(
             .mapNotNull { language -> language.linguaLanguage?.let { it to language } }
             .toMap()
 
-        val dropdownValues: List<SupportedAppLanguage> = entries.sortedBy { it.displayName }
+        val dropdownValues: List<SupportedAppLanguage> = listOf(NON_TRANSLATABLE) +
+            entries
+                .filter { it != NON_TRANSLATABLE }
+                .sortedBy { it.displayName }
+
+        val baseLanguageValues: List<SupportedAppLanguage> = entries
+            .filter { it.isTranslatable }
+            .sortedBy { it.displayName }
 
         fun detectableLanguages(): Array<Language> = entries
+            .filter { it.isTranslatable }
             .mapNotNull { it.linguaLanguage }
             .distinct()
             .toTypedArray()
@@ -130,7 +140,9 @@ enum class SupportedAppLanguage(
             script: String?,
             region: String?,
         ): SupportedAppLanguage? {
-            return entries.firstOrNull { it.matchesQualifier(languageCode, script, region) }
+            return entries
+                .filter { it.isTranslatable }
+                .firstOrNull { it.matchesQualifier(languageCode, script, region) }
         }
 
         private const val DEFAULT_VALUES_DIRECTORY_NAME = "values"

@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
 import com.liiceberg.strings.detector.Pattern
 import com.liiceberg.strings.detector.PatternType
+import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 import com.liiceberg.utils.LocalStorage
@@ -17,7 +18,11 @@ import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.resolve.ImportPath
 
-class StringResourceReplacer(private val project: Project, private val entries: List<HardcodedStringEntity>) {
+class StringResourceReplacer(
+    private val project: Project,
+    private val entries: List<HardcodedStringEntity>,
+    private val baseLanguage: SupportedAppLanguage,
+) {
 
     private val psiManager = PsiManager.getInstance(project)
     private val ktPsiFactory = KtPsiFactory(project)
@@ -111,7 +116,7 @@ class StringResourceReplacer(private val project: Project, private val entries: 
                     entity.copy(value = buildResourceValue(entity))
                 }
             }
-            StringsXmlManager(project, module, preparedEntities).update(onTranslationStarted)
+            StringsXmlManager(project, module, preparedEntities, baseLanguage).update(onTranslationStarted)
         }
     }
 
