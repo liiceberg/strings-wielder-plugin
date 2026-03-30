@@ -6,6 +6,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
+import com.liiceberg.strings.detector.Pattern
 import com.liiceberg.strings.detector.PatternType
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
@@ -40,9 +41,6 @@ class StringResourceReplacer(private val project: Project, private val entries: 
                 addImports(importsList, it)
                 val stringsToReplace = buildMap {
                     entityList.forEach { entity ->
-                        entity.patterns.filter { it.type == PatternType.TEMPLATE }.forEach { pattern ->
-                            entity.value.replace(TextRange(pattern.range.first, pattern.range.last), "%s")
-                        }
                         put(entity.value, entity)
                     }
                 }
@@ -61,13 +59,7 @@ class StringResourceReplacer(private val project: Project, private val entries: 
                     val text = expression.text.trim('"')
                     if (stringsToReplace.containsKey(text)) {
                         val entity = stringsToReplace.getValue(text)
-                        entity.patterns
-                        val resourceAccess = if (entity.pluralForm != null) {
-                            val number = entity.pluralForm?.currentNumber ?: 1
-                            PLURAL_RESOURCE_TEMPLATE.format(entity.key, number)
-                        } else {
-                            STRING_RESOURCE_TEMPLATE.format(entity.key)
-                        }
+                        val resourceAccess = buildResourceAccess(entity)
                         expression.replace(
                             ktPsiFactory.createExpression(resourceAccess)
                         )
@@ -112,7 +104,64 @@ class StringResourceReplacer(private val project: Project, private val entries: 
 
     private fun updateStringXMLFile() {
         entries.filter { it.isSelected }.groupBy { it.module }.forEach { (module, entityList) ->
-            StringsXmlManager(project, module, entityList).update()
+            val preparedEntities = entityList.map { entity ->
+                if (entity.pluralForm != null) {
+                    entity
+                } else {
+                    entity.copy(value = buildResourceValue(entity))
+                }
+            }
+            StringsXmlManager(project, module, preparedEntities).update()
+        }
+    }
+
+    private fun buildResourceAccess(entity: HardcodedStringEntity): String {
+        if (entity.pluralForm != null) {
+            val number = entity.pluralForm?.currentNumber ?: 1
+            return PLURAL_RESOURCE_TEMPLATE.format(entity.key, number)
+        }
+
+        val templateArgs = buildTemplateArguments(entity)
+        return if (templateArgs.isEmpty()) {
+            STRING_RESOURCE_TEMPLATE.format(entity.key)
+        } else {
+            STRING_RESOURCE_WITH_ARGS_TEMPLATE.format(entity.key, templateArgs.joinToString(", "))
+        }
+    }
+
+    private fun buildResourceValue(entity: HardcodedStringEntity): String {
+        val templatePatterns = entity.patterns
+            .filter { it.type == PatternType.TEMPLATE }
+            .sortedByDescending { it.range.first }
+
+        var result = entity.value
+        templatePatterns.forEach { pattern ->
+            val replacement = pattern.templateFormat ?: pattern.value
+            result = result.replace(
+                TextRange(pattern.range.first, pattern.range.last + 1),
+                replacement
+            )
+        }
+        return result
+    }
+
+    private fun buildTemplateArguments(entity: HardcodedStringEntity): List<String> {
+        return entity.patterns
+            .filter { it.type == PatternType.TEMPLATE }
+            .sortedBy { it.range.first }
+            .mapNotNull { pattern ->
+                if (pattern.templateFormat == null) {
+                    return@mapNotNull null
+                }
+                pattern.extractArgumentExpression()
+            }
+    }
+
+    private fun Pattern.extractArgumentExpression(): String? {
+        return when {
+            value.startsWith("\${") && value.endsWith("}") -> value.removePrefix("\${").removeSuffix("}")
+            value.startsWith("$") && value.length > 1 -> value.removePrefix("$")
+            else -> null
         }
     }
 

@@ -11,8 +11,26 @@ object TemplateDetector : Detector {
     override fun detect(text: String): List<Pattern> {
         return patterns.flatMap { pattern ->
             pattern.findAll(text).map { match ->
-                Pattern(PatternType.TEMPLATE, match.value, match.range)
+                Pattern(
+                    type = PatternType.TEMPLATE,
+                    value = match.value,
+                    range = match.range,
+                    templateFormat = defaultTemplateFormat(match.value),
+                )
             }
+        }
+    }
+
+    private fun defaultTemplateFormat(value: String): String? {
+        return when {
+            value.startsWith("%") -> when {
+                value.endsWith("s") -> "%s"
+                value.endsWith("d") -> "%d"
+                value.endsWith("f") -> "%f"
+                else -> "%s"
+            }
+            value.startsWith("$") -> "%s"
+            else -> null
         }
     }
 

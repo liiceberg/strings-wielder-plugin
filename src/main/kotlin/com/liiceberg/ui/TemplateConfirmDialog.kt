@@ -85,13 +85,17 @@ class TemplateConfirmDialog(
     }
 
     override fun doOKAction() {
-        variants.forEach { arg ->
+        val templates = entity.patterns.filter { it.type == PatternType.TEMPLATE }
+        templates.forEachIndexed { index, pattern ->
+            val selectedVariant = variants[index + 1]
+                ?.firstOrNull { it.selected }
+            pattern.templateFormat = selectedVariant?.id
         }
         super.doOKAction()
     }
 
     private fun createArgumentPanel(number: Int, pattern: Pattern): JComponent {
-        addArgumentsAccordedIndex(number)
+        addArgumentsAccordedIndex(number, pattern.templateFormat)
 
         val panel = JPanel(BorderLayout())
         panel.border = TitledBorder("Argument $number")
@@ -186,12 +190,19 @@ class TemplateConfirmDialog(
         }
     }
 
-    private fun addArgumentsAccordedIndex(index: Int) {
+    private fun addArgumentsAccordedIndex(index: Int, currentSelection: String?) {
         variants[index] = listOf(
-            TemplateArgument(id = "%s", text = "Apply string arg (%s)", selected = true),
+            TemplateArgument(id = "%s", text = "Apply string arg (%s)"),
             TemplateArgument(id = "%d", text = "Apply digit arg (%d)"),
             TemplateArgument(id = "%f", text = "Apply float arg (%f)"),
-            TemplateArgument(id = null, text = "Do not apply"),
+            TemplateArgument(id = null, text = "Keep as literal text"),
         )
+        val arguments = variants[index] ?: return
+        val selectedId = currentSelection ?: "%s"
+        val hasMatch = arguments.any { it.id == selectedId }
+
+        arguments.forEach { argument ->
+            argument.selected = if (hasMatch) argument.id == selectedId else argument.id == "%s"
+        }
     }
 }
