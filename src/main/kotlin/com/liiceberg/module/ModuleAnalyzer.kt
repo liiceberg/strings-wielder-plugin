@@ -12,17 +12,17 @@ class ModuleAnalyzer(project: Project) {
     private val moduleExplorer = ModuleExplorer(project)
     private val stringFinder = KotlinHardCodedStringFinder(project)
 
-    fun analyzeAllModules(): List<ModuleContent> {
+    suspend fun analyzeAllModules(): List<ModuleContent> {
         return moduleExplorer.getAndroidModules().map {
             analyzeModule(it)
         }
     }
 
-    fun analyzeModuleByName(moduleName: String): ModuleContent? {
+    suspend fun analyzeModuleByName(moduleName: String): ModuleContent? {
         return moduleExplorer.getModuleByName(moduleName)?.let { analyzeModule(it) }
     }
 
-    private fun analyzeModule(module: Module): ModuleContent {
+    private suspend fun analyzeModule(module: Module): ModuleContent {
         val kotlinFiles = ModuleFileFinder.getModuleKotlinFiles(module)
         val strings = kotlinFiles.map {
             val strings = extractStringsFromFile(it)
@@ -34,7 +34,7 @@ class ModuleAnalyzer(project: Project) {
         )
     }
 
-    private fun extractStringsFromFile(file: VirtualFile): List<String> {
+    private suspend fun extractStringsFromFile(file: VirtualFile): List<String> {
         return stringFinder.findHardCodedStrings(file)
     }
 }

@@ -4,6 +4,7 @@ import com.android.tools.idea.ui.resourcemanager.importer.getOrCreateDefaultResD
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.module.Module
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
 import com.intellij.psi.codeStyle.CodeStyleManager
@@ -19,7 +20,6 @@ import com.liiceberg.strings.translator.Translator
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 import com.liiceberg.utils.getFacet
-import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.idea.core.util.toVirtualFile
 
 class StringsXmlManager(
@@ -32,8 +32,9 @@ class StringsXmlManager(
     private val codeStyleManager = CodeStyleManager.getInstance(project)
     private val translator = Translator()
 
-    fun update() = runBlocking {
+    suspend fun update(onTranslationStarted: (String) -> Unit = {}) {
         getResourcesFiles().forEach { file ->
+            ProgressManager.checkCanceled()
             val rootTag = file.rootTag ?: return@forEach
             if (rootTag.name != RESOURCES_TAG) return@forEach
 
@@ -45,7 +46,12 @@ class StringsXmlManager(
                 }
                 is ResourceDirectoryLanguage.Known -> {
                     entries.forEach { entity ->
-                        buildTranslatedResource(entity, directoryLanguage.language)?.let { resource ->
+                        ProgressManager.checkCanceled()
+                        buildTranslatedResource(
+                            entity = entity,
+                            targetLanguage = directoryLanguage.language,
+                            onTranslationStarted = onTranslationStarted,
+                        )?.let { resource ->
                             addOrUpdateString(rootTag, entity.key, resource)
                         }
                     }
@@ -60,6 +66,7 @@ class StringsXmlManager(
     private suspend fun buildTranslatedResource(
         entity: HardcodedStringEntity,
         targetLanguage: SupportedAppLanguage,
+        onTranslationStarted: (String) -> Unit,
     ): Resource? {
         val resource = entity.toResource()
         val sourceLanguage = entity.sourceLanguage ?: return null
@@ -67,6 +74,7 @@ class StringsXmlManager(
         return if (sourceLanguage == targetLanguage) {
             resource
         } else {
+            onTranslationStarted("${entity.key} -> ${targetLanguage.displayName}")
             translator.translate(resource, sourceLanguage, targetLanguage)
         }
     }
@@ -76,6 +84,7 @@ class StringsXmlManager(
             when (value) {
                 is PluralResource -> addOrUpdatePlural(rootTag, key, value)
                 is StringResource -> addOrUpdateText(rootTag, key, value)
+                else -> Unit
             }
         }
     }

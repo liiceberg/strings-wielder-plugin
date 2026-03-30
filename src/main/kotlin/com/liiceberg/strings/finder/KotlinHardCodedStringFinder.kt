@@ -1,5 +1,6 @@
 package com.liiceberg.strings.finder
 
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
@@ -11,7 +12,7 @@ class KotlinHardCodedStringFinder(project: Project) {
 
     private val psiManager = PsiManager.getInstance(project)
 
-    fun findHardCodedStrings(virtualFile: VirtualFile): List<String> {
+    suspend fun findHardCodedStrings(virtualFile: VirtualFile): List<String> {
         psiManager.findFile(virtualFile)?.let { psiFile ->
             if (psiFile.isWritable) {
                 return extractHardCodedString(psiFile)
@@ -20,7 +21,7 @@ class KotlinHardCodedStringFinder(project: Project) {
         return emptyList()
     }
 
-    private fun extractHardCodedString(file: PsiFile) : List<String> {
+    private suspend fun extractHardCodedString(file: PsiFile) : List<String> = readAction {
         file as KtFile
         val found = mutableListOf<String>()
 
@@ -36,7 +37,7 @@ class KotlinHardCodedStringFinder(project: Project) {
             }
         })
 
-        return found
+        found
     }
 
     private fun shouldInclude(expr: KtStringTemplateExpression): Boolean {

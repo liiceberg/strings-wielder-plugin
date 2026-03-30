@@ -1,28 +1,30 @@
 package com.liiceberg.strings
 
 import com.intellij.openapi.module.Module
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.liiceberg.strings.translator.LanguageDetector
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.strings.translator.Translator
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
-import kotlinx.coroutines.runBlocking
 
 class StringResourcesProcessor(private val stringResources: Set<String>) {
     private val translator = Translator()
 
-    fun process(
+    suspend fun process(
         hardcodedStrings: List<String>,
         virtualFile: VirtualFile,
         module: Module,
+        onTranslationStarted: (String) -> Unit = {},
     ): List<HardcodedStringEntity> {
         val keysToAddInStringXML = mutableListOf<String>()
         val entries = mutableListOf<HardcodedStringEntity>()
 
         hardcodedStrings.forEach { str ->
+            ProgressManager.checkCanceled()
             val sourceLanguage = LanguageDetector.detect(str)
-            val stringResourceKey = getKey(str, sourceLanguage, keysToAddInStringXML)
+            val stringResourceKey = getKey(str, sourceLanguage, keysToAddInStringXML, onTranslationStarted = onTranslationStarted)
             keysToAddInStringXML.add(stringResourceKey)
             entries.add(
                 HardcodedStringEntity(
@@ -39,13 +41,14 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
         return entries
     }
 
-    private fun getKey(
+    private suspend fun getKey(
         originalText: String,
         sourceLanguage: SupportedAppLanguage?,
         stringsToAddInStringXMLFile: MutableList<String>,
-        repeatCount: Int = 0
+        repeatCount: Int = 0,
+        onTranslationStarted: (String) -> Unit = {},
     ): String {
-        val englishText = translateToEnglishIfNeeded(originalText, sourceLanguage)
+        val englishText = translateToEnglishIfNeeded(originalText, sourceLanguage, onTranslationStarted)
         val baseKey = normalizeText(englishText)
 
         val candidateKey = if (repeatCount == 0) baseKey else "${baseKey}_$repeatCount"
@@ -55,29 +58,30 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
                 englishText,
                 SupportedAppLanguage.ENGLISH,
                 stringsToAddInStringXMLFile,
-                repeatCount + 1
+                repeatCount + 1,
+                onTranslationStarted,
             )
         }
         return candidateKey
     }
 
-    private fun translateToEnglishIfNeeded(
+    private suspend fun translateToEnglishIfNeeded(
         originalText: String,
         sourceLanguage: SupportedAppLanguage?,
+        onTranslationStarted: (String) -> Unit,
     ): String {
         if (!shouldTranslateToEnglish(originalText, sourceLanguage)) {
             return originalText
         }
         val detectedLanguage = sourceLanguage ?: return originalText
 
+        onTranslationStarted(originalText)
         return runCatching {
-            runBlocking {
-                translator.translate(
-                    text = originalText,
-                    sourceLanguage = detectedLanguage,
-                    targetLanguage = SupportedAppLanguage.ENGLISH,
-                )
-            }
+            translator.translate(
+                text = originalText,
+                sourceLanguage = detectedLanguage,
+                targetLanguage = SupportedAppLanguage.ENGLISH,
+            )
         }.getOrDefault(originalText)
     }
 

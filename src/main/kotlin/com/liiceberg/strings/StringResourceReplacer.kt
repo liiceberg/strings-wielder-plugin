@@ -22,7 +22,7 @@ class StringResourceReplacer(private val project: Project, private val entries: 
     private val psiManager = PsiManager.getInstance(project)
     private val ktPsiFactory = KtPsiFactory(project)
 
-    fun replace() {
+    suspend fun replace(onTranslationStarted: (String) -> Unit = {}) {
         entries.filter { it.isSelected }.groupBy { it.virtualFile }.forEach { (file, entityList) ->
 
             val importsList = mutableListOf<String>()
@@ -47,7 +47,7 @@ class StringResourceReplacer(private val project: Project, private val entries: 
                 replaceInKotlinFile(stringsToReplace, it)
             }
         }
-        updateStringXMLFile()
+        updateStringXMLFile(onTranslationStarted)
     }
 
     private fun replaceInKotlinFile(stringsToReplace: Map<String, HardcodedStringEntity>, ktFile: KtFile) {
@@ -102,7 +102,7 @@ class StringResourceReplacer(private val project: Project, private val entries: 
 
     }
 
-    private fun updateStringXMLFile() {
+    private suspend fun updateStringXMLFile(onTranslationStarted: (String) -> Unit) {
         entries.filter { it.isSelected }.groupBy { it.module }.forEach { (module, entityList) ->
             val preparedEntities = entityList.map { entity ->
                 if (entity.pluralForm != null) {
@@ -111,7 +111,7 @@ class StringResourceReplacer(private val project: Project, private val entries: 
                     entity.copy(value = buildResourceValue(entity))
                 }
             }
-            StringsXmlManager(project, module, preparedEntities).update()
+            StringsXmlManager(project, module, preparedEntities).update(onTranslationStarted)
         }
     }
 

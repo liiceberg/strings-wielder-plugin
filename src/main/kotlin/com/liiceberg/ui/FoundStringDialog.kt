@@ -13,6 +13,7 @@ import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.ui.entity.SuggestionType
 import com.liiceberg.utils.Constants
+import kotlinx.coroutines.runBlocking
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Dimension
@@ -41,13 +42,18 @@ class FoundStringDialog(
 
         if (errorLabel.text.isNotEmpty()) return
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Extracting string resources", false) {
-            override fun run(indicator: com.intellij.openapi.progress.ProgressIndicator) {
-                replacer.replace()
-            }
+        super.doOKAction()
 
-            override fun onSuccess() {
-                close(OK_EXIT_CODE)
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Extracting string resources", true) {
+            override fun run(indicator: com.intellij.openapi.progress.ProgressIndicator) {
+                indicator.isIndeterminate = true
+                indicator.text = "Extracting string resources"
+                runBlocking {
+                    replacer.replace { description ->
+                        indicator.text = "Translating localized resources"
+                        indicator.text2 = "Translating: ${description.take(80)}"
+                    }
+                }
             }
 
             override fun onThrowable(error: Throwable) {
