@@ -7,7 +7,6 @@ object Constants {
 
     object Preferences {
         const val STRING_WIELDER_PREFERENCES = "STRING_WIELDER_PREFERENCES"
-        const val IMPORT_PACKAGE = "IMPORT_PACKAGE"
         const val LOCAL_STORAGE = "LOCAL_STORAGE"
         const val BASE_LANGUAGE = "BASE_LANGUAGE"
     }
@@ -17,7 +16,6 @@ object Constants {
     }
 
     object Labels {
-        const val LOADING_STRINGS = "Loading Strings...This may take some time."
         const val INVALID_KEY_FILED = "The key can consist of letters, numbers, and _"
         const val INVALID_KEYS_FOUND = "Attention: incorrect keys were found. Edit them before continuing."
     }

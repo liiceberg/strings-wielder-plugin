@@ -2,6 +2,7 @@ package com.liiceberg.module
 
 import com.android.tools.idea.concurrency.coroutineScope
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.platform.ide.progress.withBackgroundProgress
 import com.liiceberg.model.ModuleContent
@@ -10,6 +11,7 @@ import com.liiceberg.strings.StringResourcesProcessor
 import com.liiceberg.strings.detector.PluralDetector
 import com.liiceberg.strings.detector.TemplateDetector
 import com.liiceberg.strings.finder.StringResourceFinder
+import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.FoundStringDialog
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.ui.entity.SuggestionType
@@ -23,17 +25,12 @@ class ModuleAnalysisService(private val project: Project, private val isDeepAnal
     fun performAnalysis() {
         project.coroutineScope.launch {
             withBackgroundProgress(project, "Preparing strings") {
-
                 val analyzeResults = analyzer.analyzeAllModules()
                 val entries = analyzeResults.flatMap { moduleContent ->
-                    val stringResources = StringResourceFinder
-                        .getModuleStrings(moduleContent.module)
-                        ?.assetSets
-                        ?.map { it.name }
-                        ?.toSet() ?: emptySet()
+                    val stringResources = StringResourceFinder.getAccessibleResourceNames(moduleContent.module)
                     getEntries(moduleContent, stringResources)
                 }.map {
-                    val duplicates = findDuplicates(it.value)
+                    val duplicates = findDuplicates(it.module, it.value, it.sourceLanguage)
                     if (duplicates.isNotEmpty()) {
                         it.suggestions.add(SuggestionType.DUPLICATE)
                         it.duplicateOf = duplicates
@@ -52,7 +49,7 @@ class ModuleAnalysisService(private val project: Project, private val isDeepAnal
                 }
 
                 withContext(Dispatchers.EDT) {
-                    FoundStringDialog(project, entries).show()
+                    FoundStringDialog(project, entries, isDeepAnalyze).show()
                 }
             }
         }
@@ -80,11 +77,15 @@ class ModuleAnalysisService(private val project: Project, private val isDeepAnal
             .flatten()
     }
 
-    private fun findDuplicates(string: String): List<SearchUtil.SearchResult> {
+    private fun findDuplicates(
+        module: Module,
+        string: String,
+        sourceLanguage: SupportedAppLanguage?,
+    ): List<SearchUtil.SearchResult> {
         return if (isDeepAnalyze) {
-            searchUtil.fuzzySearch(string)
+            searchUtil.fuzzySearch(module, string, sourceLanguage)
         } else {
-            return searchUtil.search(string)?.let { res ->
+            return searchUtil.search(module, string, sourceLanguage)?.let { res ->
                 listOf(res)
             } ?: emptyList()
         }

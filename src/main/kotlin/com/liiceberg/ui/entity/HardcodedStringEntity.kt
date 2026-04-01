@@ -15,6 +15,7 @@ data class HardcodedStringEntity(
     val module: Module,
     val suggestions: MutableSet<SuggestionType> = mutableSetOf(),
     var duplicateOf: List<SearchUtil.SearchResult>? = null,
+    var existingResource: SearchUtil.SearchResult? = null,
     var patterns: MutableList<Pattern> = mutableListOf(),
     var pluralForm: PluralResource? = null,
     var sourceLanguage: SupportedAppLanguage? = null,

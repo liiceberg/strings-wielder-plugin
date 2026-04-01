@@ -5,7 +5,7 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
-import com.liiceberg.strings.StringsXmlManager
+import com.liiceberg.strings.SearchUtil
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -21,6 +21,8 @@ class DuplicateDialog(
 
     private val buttonGroup = ButtonGroup()
     private val keepSeparateButton = JRadioButton("Keep separate resource")
+    private val originalKey = entity.key
+    private val originalExistingResource = entity.existingResource
 
 
     init {
@@ -82,35 +84,23 @@ class DuplicateDialog(
         val listPanel = JPanel()
         listPanel.layout = BoxLayout(listPanel, BoxLayout.Y_AXIS)
 
-        entity.duplicateOf?.forEach {
-
-            val key = it.tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) ?: ""
-            val value = when (it.tag.name) {
-                StringsXmlManager.STRING_TAG -> {
-                    it.tag.value.text
-                }
-                StringsXmlManager.PLURAL_TAG -> {
-                    val builder = StringBuilder()
-                    builder.append("(plural) ")
-                    for (item in it.tag.findSubTags(StringsXmlManager.ITEM_TAG)) {
-                        item.getAttributeValue(StringsXmlManager.QUANTITY_TAG_ATTRIBUTE)?.let { attr ->
-                            builder.append("$attr = ${item.value.text}")
-                            builder.append(", ")
-                        }
-                    }
-                    builder.toString().trim().trim(',')
-                }
-                else -> ""
+        entity.duplicateOf?.forEach { duplicate ->
+            val resourceTypeLabel = when (duplicate.resourceType) {
+                SearchUtil.ResourceType.STRING -> "string"
+                SearchUtil.ResourceType.PLURAL -> "plural"
             }
 
-            val radio = JRadioButton("Use existing resource: \"${value}\"")
+            val radio = JRadioButton("Use existing $resourceTypeLabel resource: \"${duplicate.value}\"")
             radio.addActionListener {
-                entity.key = key
-                entity.value = value
+                entity.key = duplicate.key
+                entity.existingResource = duplicate
             }
             buttonGroup.add(radio)
 
-            val label = JLabel("Key: $key").apply {
+            val label = JLabel(
+                "Key: ${duplicate.key}  |  Module: ${duplicate.module.name}" +
+                    (duplicate.packageName?.let { "  |  Package: $it" } ?: "")
+            ).apply {
                 foreground = JBColor.GRAY
             }
 
@@ -144,6 +134,10 @@ class DuplicateDialog(
         panel.border = TitledBorder("Create")
 
         keepSeparateButton.isSelected = true
+        keepSeparateButton.addActionListener {
+            entity.key = originalKey
+            entity.existingResource = originalExistingResource
+        }
 
         buttonGroup.add(keepSeparateButton)
         panel.add(keepSeparateButton)

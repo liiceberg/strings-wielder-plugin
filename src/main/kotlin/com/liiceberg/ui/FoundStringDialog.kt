@@ -1,5 +1,7 @@
 package com.liiceberg.ui
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -9,6 +11,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
+import com.liiceberg.strings.SearchUtil
 import com.liiceberg.strings.StringResourceReplacer
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
@@ -27,9 +30,12 @@ import javax.swing.table.TableCellRenderer
 class FoundStringDialog(
     private val project: Project,
     private val entries: List<HardcodedStringEntity>,
+    private val isDeepAnalyze: Boolean = true,
 ) : DialogWrapper(project) {
 
-    private val tableModel = FoundStringTableModel(entries)
+    private val searchUtil = SearchUtil(project)
+    private val duplicateRefreshRequests = mutableMapOf<Int, Int>()
+    private val tableModel = FoundStringTableModel(entries, ::onLanguageChanged)
     private val stringsTable = JBTable(tableModel)
     private val baseLanguageComboBox = ComboBox(
         SupportedAppLanguage.baseLanguageValues.toTypedArray()
@@ -45,6 +51,11 @@ class FoundStringDialog(
     init {
         title = Constants.Titles.HARDCODED_STRINGS_FOUND_TABLE
         init()
+    }
+
+    override fun dispose() {
+        duplicateRefreshRequests.clear()
+        super.dispose()
     }
 
     override fun doOKAction() {
@@ -234,6 +245,68 @@ class FoundStringDialog(
         }
 
         tableModel.fireTableRowsUpdated(row, row)
+    }
+
+    private fun onLanguageChanged(row: Int, language: SupportedAppLanguage?) {
+        val requestId = (duplicateRefreshRequests[row] ?: 0) + 1
+        duplicateRefreshRequests[row] = requestId
+        val entity = entries[row]
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val duplicates = findDuplicates(entity, language)
+            ApplicationManager.getApplication().invokeLater({
+                if (isDisposed || duplicateRefreshRequests[row] != requestId) {
+                    return@invokeLater
+                }
+                applyDuplicateState(entity, duplicates)
+                tableModel.fireTableRowsUpdated(row, row)
+            }, ModalityState.stateForComponent(stringsTable))
+        }
+    }
+
+    private fun findDuplicates(
+        entity: HardcodedStringEntity,
+        sourceLanguage: SupportedAppLanguage?,
+    ): List<SearchUtil.SearchResult> {
+
+        return if (isDeepAnalyze) {
+            searchUtil.fuzzySearch(
+                module = entity.module,
+                string = entity.value,
+                sourceLanguage = sourceLanguage,
+            )
+        } else {
+            searchUtil.search(
+                module = entity.module,
+                string = entity.value,
+                sourceLanguage = sourceLanguage,
+            )?.let(::listOf).orEmpty()
+        }
+    }
+
+    private fun applyDuplicateState(
+        entity: HardcodedStringEntity,
+        duplicates: List<SearchUtil.SearchResult>,
+    ) {
+        entity.duplicateOf = duplicates.ifEmpty { null }
+        if (duplicates.isNotEmpty()) {
+            entity.suggestions.add(SuggestionType.DUPLICATE)
+        } else {
+            entity.suggestions.remove(SuggestionType.DUPLICATE)
+        }
+
+        entity.existingResource?.let { selected ->
+            val selectedStillAvailable = duplicates.any {
+                it.module.name == selected.module.name &&
+                    it.packageName == selected.packageName &&
+                    it.key == selected.key &&
+                    it.resourceType == selected.resourceType
+            }
+            if (!selectedStillAvailable) {
+                entity.existingResource = null
+            }
+        }
+        println(entity)
     }
 
     private companion object {

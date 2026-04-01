@@ -4,14 +4,15 @@ import ai.grazie.text.TextRange
 import ai.grazie.text.replace
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
+import com.liiceberg.strings.SearchUtil.ResourceType
 import com.liiceberg.strings.detector.Pattern
 import com.liiceberg.strings.detector.PatternType
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
-import com.liiceberg.utils.Constants
-import com.liiceberg.utils.LocalStorage
+import com.liiceberg.utils.getAndroidPackageName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
@@ -26,16 +27,16 @@ class StringResourceReplacer(
 
     private val psiManager = PsiManager.getInstance(project)
     private val ktPsiFactory = KtPsiFactory(project)
+    private val modulePackages = mutableMapOf<String, String?>()
 
     suspend fun replace(onTranslationStarted: (String) -> Unit = {}) {
         entries.filter { it.isSelected }.groupBy { it.virtualFile }.forEach { (file, entityList) ->
 
             val importsList = mutableListOf<String>()
-            getImportR()?.let { importsList.add(it) }
-            if (entityList.any { it.pluralForm != null }) {
+            if (entityList.any { shouldUsePluralAccess(it) }) {
                 importsList.add(PLURAL_RESOURCE_IMPORT)
             }
-            if (!entityList.all { it.pluralForm != null }) {
+            if (entityList.any { !shouldUsePluralAccess(it) }) {
                 importsList.add(STRING_RESOURCE_IMPORT)
             }
 
@@ -74,7 +75,6 @@ class StringResourceReplacer(
         }
     }
 
-    @Suppress("UnstableApiUsage")
     private fun addImports(imports: List<String>, ktFile: KtFile) {
         WriteCommandAction.runWriteCommandAction(project) {
             val existingImports = ktFile.importDirectives.map { it.text.split(' ').last() }
@@ -100,15 +100,11 @@ class StringResourceReplacer(
         }
     }
 
-    private fun getImportR(): String? {
-        return LocalStorage.getData(Constants.Preferences.IMPORT_PACKAGE)?.let {
-                RESOURCES_IMPORT_TEMPLATE.format(it)
-            }
-
-    }
-
     private suspend fun updateStringXMLFile(onTranslationStarted: (String) -> Unit) {
-        entries.filter { it.isSelected }.groupBy { it.module }.forEach { (module, entityList) ->
+        entries
+            .filter { it.isSelected && it.existingResource == null }
+            .groupBy { it.module }
+            .forEach { (module, entityList) ->
             val preparedEntities = entityList.map { entity ->
                 if (entity.pluralForm != null) {
                     entity
@@ -121,16 +117,57 @@ class StringResourceReplacer(
     }
 
     private fun buildResourceAccess(entity: HardcodedStringEntity): String {
-        if (entity.pluralForm != null) {
+        val resourceReference = resolveResourceReference(entity)
+        if (resourceReference.resourceType == ResourceType.PLURAL) {
             val number = entity.pluralForm?.currentNumber ?: 1
-            return PLURAL_RESOURCE_TEMPLATE.format(entity.key, number)
+            return PLURAL_RESOURCE_TEMPLATE.format(resourceReference.rReference, resourceReference.key, number)
         }
 
         val templateArgs = buildTemplateArguments(entity)
         return if (templateArgs.isEmpty()) {
-            STRING_RESOURCE_TEMPLATE.format(entity.key)
+            STRING_RESOURCE_TEMPLATE.format(resourceReference.rReference, resourceReference.key)
         } else {
-            STRING_RESOURCE_WITH_ARGS_TEMPLATE.format(entity.key, templateArgs.joinToString(", "))
+            STRING_RESOURCE_WITH_ARGS_TEMPLATE.format(
+                resourceReference.rReference,
+                resourceReference.key,
+                templateArgs.joinToString(", ")
+            )
+        }
+    }
+
+    private fun shouldUsePluralAccess(entity: HardcodedStringEntity): Boolean {
+        return resolveResourceReference(entity).resourceType == ResourceType.PLURAL
+    }
+
+    private fun resolveResourceReference(entity: HardcodedStringEntity): ResourceReference {
+        entity.existingResource?.let { existing ->
+            return ResourceReference(
+                key = existing.key,
+                rReference = buildRReference(existing.packageName),
+                resourceType = existing.resourceType,
+            )
+        }
+
+        return ResourceReference(
+            key = entity.key,
+            rReference = buildRReference(getModulePackageName(entity.module)),
+            resourceType = if (entity.pluralForm != null) ResourceType.PLURAL else ResourceType.STRING,
+        )
+    }
+
+    private fun buildRReference(packageName: String?): String {
+        return if (packageName.isNullOrBlank()) {
+            DEFAULT_R_REFERENCE
+        } else {
+            "$packageName.$DEFAULT_R_REFERENCE"
+        }
+    }
+
+    private fun getModulePackageName(module: Module): String? {
+        return modulePackages.getOrPut(module.name) {
+            ApplicationManager.getApplication().runReadAction<String?> {
+                module.getAndroidPackageName()
+            }
         }
     }
 
@@ -171,11 +208,17 @@ class StringResourceReplacer(
     }
 
     private companion object {
-        const val STRING_RESOURCE_TEMPLATE = "stringResource(R.string.%s)"
-        const val STRING_RESOURCE_WITH_ARGS_TEMPLATE = "stringResource(R.string.%s, %s)"
-        const val PLURAL_RESOURCE_TEMPLATE = "pluralStringResource(R.plurals.%s, %d)"
+        const val STRING_RESOURCE_TEMPLATE = "stringResource(%s.string.%s)"
+        const val STRING_RESOURCE_WITH_ARGS_TEMPLATE = "stringResource(%s.string.%s, %s)"
+        const val PLURAL_RESOURCE_TEMPLATE = "pluralStringResource(%s.plurals.%s, %d)"
         const val STRING_RESOURCE_IMPORT = "androidx.compose.ui.res.stringResource"
         const val PLURAL_RESOURCE_IMPORT = "androidx.compose.ui.res.pluralStringResource"
-        const val RESOURCES_IMPORT_TEMPLATE = "%s.R"
+        const val DEFAULT_R_REFERENCE = "R"
     }
+
+    private data class ResourceReference(
+        val key: String,
+        val rReference: String,
+        val resourceType: ResourceType,
+    )
 }

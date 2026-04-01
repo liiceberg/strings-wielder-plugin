@@ -6,7 +6,8 @@ import com.liiceberg.ui.entity.SuggestionType
 import javax.swing.table.AbstractTableModel
 
 class FoundStringTableModel(
-    private val entries: List<HardcodedStringEntity>
+    private val entries: List<HardcodedStringEntity>,
+    private val onLanguageChanged: (Int, SupportedAppLanguage?) -> Unit = { _, _ -> },
 ) : AbstractTableModel() {
 
     private val colNames = arrayOf("Key", "Value", "Language", "Add to strings.xml", "Suggestions", "Action")
@@ -46,10 +47,16 @@ class FoundStringTableModel(
         when (columnIndex) {
             0 -> entries[rowIndex].key = aValue as String
             1 -> entries[rowIndex].value = aValue as String
-            2 -> entries[rowIndex].sourceLanguage = aValue as? SupportedAppLanguage
+            2 -> {
+                val language = aValue as? SupportedAppLanguage
+                if (entries[rowIndex].sourceLanguage != language) {
+                    entries[rowIndex].sourceLanguage = language
+                    onLanguageChanged(rowIndex, language)
+                }
+            }
             3 -> entries[rowIndex].isSelected = aValue as Boolean
         }
-        fireTableCellUpdated(rowIndex, columnIndex)
+        fireTableRowsUpdated(rowIndex, rowIndex)
     }
 
     private fun buildSuggestionText(e: HardcodedStringEntity): String {
