@@ -3,7 +3,6 @@ package com.liiceberg.strings.finder
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.parents
@@ -12,19 +11,17 @@ class KotlinHardCodedStringFinder(project: Project) {
 
     private val psiManager = PsiManager.getInstance(project)
 
-    suspend fun findHardCodedStrings(virtualFile: VirtualFile): List<String> {
-        psiManager.findFile(virtualFile)?.let { psiFile ->
-            if (psiFile.isWritable) {
-                return extractHardCodedString(psiFile)
-            }
+    suspend fun findHardCodedStrings(virtualFile: VirtualFile): List<String> = readAction {
+        val psiFile = psiManager.findFile(virtualFile) as? KtFile ?: return@readAction emptyList()
+        if (!psiFile.isWritable) {
+            return@readAction emptyList()
         }
-        return emptyList()
+
+        extractHardCodedString(psiFile)
     }
 
-    private suspend fun extractHardCodedString(file: PsiFile) : List<String> = readAction {
-        file as KtFile
+    private fun extractHardCodedString(file: KtFile): List<String> {
         val found = mutableListOf<String>()
-
         file.accept(object : KtTreeVisitorVoid() {
 
             override fun visitStringTemplateExpression(expression: KtStringTemplateExpression) {
@@ -37,7 +34,7 @@ class KotlinHardCodedStringFinder(project: Project) {
             }
         })
 
-        found
+        return found
     }
 
     private fun shouldInclude(expr: KtStringTemplateExpression): Boolean {
@@ -52,21 +49,23 @@ class KotlinHardCodedStringFinder(project: Project) {
         return true
     }
 
-    private fun isIncludedCall(expr: KtStringTemplateExpression) : Boolean {
+    private fun isIncludedCall(expr: KtStringTemplateExpression): Boolean {
         return expr.parents.any { parent ->
             when (parent) {
                 is KtCallExpression -> {
                     parent.calleeExpression?.text?.contains(SET_CONTENT, ignoreCase = true) == true
                 }
+
                 is KtDotQualifiedExpression -> {
                     parent.selectorExpression?.text?.contains(SET_CONTENT, ignoreCase = true) == true
                 }
+
                 else -> false
             }
         }
     }
 
-    private fun isExcludedCall(expr: KtStringTemplateExpression) : Boolean {
+    private fun isExcludedCall(expr: KtStringTemplateExpression): Boolean {
         val callExpression = expr.parents.filterIsInstance<KtCallExpression>().firstOrNull() ?: return false
         val calleeText = callExpression.calleeExpression?.text ?: return false
 

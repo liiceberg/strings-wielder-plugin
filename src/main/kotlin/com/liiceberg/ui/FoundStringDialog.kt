@@ -270,7 +270,7 @@ class FoundStringDialog(
     ): List<SearchUtil.SearchResult> {
 
         return if (isDeepAnalyze) {
-            searchUtil.fuzzySearch(
+            searchUtil.deepSearch(
                 module = entity.module,
                 string = entity.value,
                 sourceLanguage = sourceLanguage,

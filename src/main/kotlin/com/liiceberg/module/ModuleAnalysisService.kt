@@ -83,7 +83,7 @@ class ModuleAnalysisService(private val project: Project, private val isDeepAnal
         sourceLanguage: SupportedAppLanguage?,
     ): List<SearchUtil.SearchResult> {
         return if (isDeepAnalyze) {
-            searchUtil.fuzzySearch(module, string, sourceLanguage)
+            searchUtil.deepSearch(module, string, sourceLanguage)
         } else {
             return searchUtil.search(module, string, sourceLanguage)?.let { res ->
                 listOf(res)

@@ -1,0 +1,10 @@
+package com.liiceberg.strings.semantic.model
+
+import com.google.gson.annotations.SerializedName
+
+data class SemanticDuplicateResponse(
+    @SerializedName("similarity")
+    val similarity: Double? = null,
+    @SerializedName("is_duplicate")
+    val isDuplicate: Boolean? = null,
+)

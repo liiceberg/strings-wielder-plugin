@@ -6,7 +6,9 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
 import com.intellij.psi.xml.XmlFile
+import com.intellij.psi.xml.XmlTag
 import com.liiceberg.module.ModuleFileFinder
+import com.liiceberg.strings.semantic.SemanticDuplicateSearcher
 import com.liiceberg.strings.translator.ResourceDirectoryLanguage
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.utils.getAndroidPackageName
@@ -29,8 +31,17 @@ class SearchUtil(project: Project) {
     }
 
     private val psiManager = PsiManager.getInstance(project)
+    private val semanticDuplicateSearcher = SemanticDuplicateSearcher()
     private val quantityValues = listOf("other", "many", "few", "one", "zero")
     private val resourceCache = mutableMapOf<String, List<IndexedResource>>()
+
+    fun deepSearch(
+        module: Module,
+        string: String,
+        sourceLanguage: SupportedAppLanguage?,
+    ): List<SearchResult> {
+        return (fuzzySearch(module, string, sourceLanguage) + semanticSearch(module, string, sourceLanguage)).toSet().toList()
+    }
 
     fun search(
         module: Module,
@@ -44,7 +55,7 @@ class SearchUtil(project: Project) {
         return null
     }
 
-    fun fuzzySearch(
+    private fun fuzzySearch(
         module: Module,
         string: String,
         sourceLanguage: SupportedAppLanguage?,
@@ -56,6 +67,28 @@ class SearchUtil(project: Project) {
                 FuzzySearch
                     .extractAll(normalizedQuery, resources.keys, MIN_THRESHOLD)
                     .flatMap { resources[it.string].orEmpty() }
+            }
+            .distinctBy { result ->
+                DuplicateResourceKey(
+                    moduleName = result.module.name,
+                    packageName = result.packageName,
+                    key = result.key,
+                    resourceType = result.resourceType,
+                )
+            }
+    }
+
+    private fun semanticSearch(
+        module: Module,
+        string: String,
+        sourceLanguage: SupportedAppLanguage?,
+    ): List<SearchResult> {
+        return buildSearchQueries(string, sourceLanguage)
+            .flatMap { query ->
+                val q = normalizeStringForSearch(query.text)
+                getResources(module, query.scopes).values.flatten().filter { candidate ->
+                    semanticDuplicateSearcher.isSemanticDuplicate(q, normalizeStringForSearch(candidate.value))
+                }
             }
             .distinctBy { result ->
                 DuplicateResourceKey(
@@ -209,7 +242,7 @@ class SearchUtil(project: Project) {
         this[normalizedValue] = currentValues + result
     }
 
-    private fun resolvePluralPreview(items: Array<com.intellij.psi.xml.XmlTag>): String? {
+    private fun resolvePluralPreview(items: Array<XmlTag>): String? {
         val map = mutableMapOf<String, String>()
         items.forEach { item ->
             item.getAttributeValue(StringsXmlManager.QUANTITY_TAG_ATTRIBUTE)?.let { quantity ->
