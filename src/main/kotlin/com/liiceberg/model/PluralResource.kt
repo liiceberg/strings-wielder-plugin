@@ -3,6 +3,7 @@ package com.liiceberg.model
 interface Resource
 
 data class PluralResource(
+    val zero: String? = null,
     val one: String? = null,
     val few: String? = null,
     val many: String? = null,

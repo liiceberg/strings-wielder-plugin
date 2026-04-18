@@ -16,6 +16,7 @@ class PluralDialog(
     private val entity: HardcodedStringEntity
 ) : DialogWrapper(project) {
 
+    private val zeroField = JTextField()
     private val oneField = JTextField()
     private val fewField = JTextField()
     private val manyField = JTextField()
@@ -95,6 +96,7 @@ class PluralDialog(
 
         entity.key = keyField.text
         entity.pluralForm = PluralResource(
+            zero = zeroField.text,
             one = oneField.text,
             few = fewField.text,
             many = manyField.text,
@@ -135,11 +137,12 @@ class PluralDialog(
             panel.add(field, c)
         }
 
-        addRow(0, "one:", oneField)
-        addRow(1, "few:", fewField)
-        addRow(2, "many:", manyField)
-        addRow(3, "other:", otherField, required = true)
-        addRow(4,"current number:", currentNumberField, required = true)
+        addRow(0, "zero:", zeroField)
+        addRow(1, "one:", oneField)
+        addRow(2, "few:", fewField)
+        addRow(3, "many:", manyField)
+        addRow(4, "other:", otherField, required = true)
+        addRow(5,"current number:", currentNumberField, required = true)
 
         return panel
     }

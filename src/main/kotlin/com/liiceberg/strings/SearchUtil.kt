@@ -8,6 +8,11 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.xml.XmlFile
 import com.intellij.psi.xml.XmlTag
 import com.liiceberg.module.ModuleFileFinder
+import com.liiceberg.strings.StringsXmlManager.Companion.QUANTITY_FEW
+import com.liiceberg.strings.StringsXmlManager.Companion.QUANTITY_MANY
+import com.liiceberg.strings.StringsXmlManager.Companion.QUANTITY_ONE
+import com.liiceberg.strings.StringsXmlManager.Companion.QUANTITY_OTHER
+import com.liiceberg.strings.StringsXmlManager.Companion.QUANTITY_ZERO
 import com.liiceberg.strings.semantic.SemanticDuplicateSearcher
 import com.liiceberg.strings.translator.ResourceDirectoryLanguage
 import com.liiceberg.strings.translator.SupportedAppLanguage
@@ -32,7 +37,7 @@ class SearchUtil(project: Project) {
 
     private val psiManager = PsiManager.getInstance(project)
     private val semanticDuplicateSearcher = SemanticDuplicateSearcher()
-    private val quantityValues = listOf("other", "many", "few", "one", "zero")
+    private val quantityValues = listOf(QUANTITY_OTHER, QUANTITY_MANY, QUANTITY_FEW, QUANTITY_ONE, QUANTITY_ZERO)
     private val resourceCache = mutableMapOf<String, List<IndexedResource>>()
 
     fun deepSearch(

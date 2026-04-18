@@ -65,7 +65,7 @@ class StringsXmlManager(
     private suspend fun buildBaseResource(
         entity: HardcodedStringEntity,
         onTranslationStarted: (String) -> Unit,
-    ): PreparedResource? {
+    ): PreparedResource {
         val resource = entity.toResource()
         val sourceLanguage = entity.sourceLanguage
 
@@ -164,6 +164,7 @@ class StringsXmlManager(
         }
 
         applyTranslatableAttribute(existingTag, translatable)
+        updatePluralItem(rootTag, existingTag, QUANTITY_ZERO, value.zero)
         updatePluralItem(rootTag, existingTag, QUANTITY_ONE, value.one)
         updatePluralItem(rootTag, existingTag, QUANTITY_FEW, value.few)
         updatePluralItem(rootTag, existingTag, QUANTITY_MANY, value.many)
@@ -273,10 +274,11 @@ class StringsXmlManager(
         private const val TRANSLATABLE_TAG_ATTRIBUTE = "translatable"
         private const val FALSE_ATTRIBUTE_VALUE = "false"
         private const val DEFAULT_VALUES_DIRECTORY = "values"
-        private const val QUANTITY_ONE = "one"
-        private const val QUANTITY_FEW = "few"
-        private const val QUANTITY_MANY = "many"
-        private const val QUANTITY_OTHER = "other"
+        const val QUANTITY_ZERO = "zero"
+        const val QUANTITY_ONE = "one"
+        const val QUANTITY_FEW = "few"
+        const val QUANTITY_MANY = "many"
+        const val QUANTITY_OTHER = "other"
         private const val DEFAULT_STRINGS_XML = "<resources>\n</resources>\n"
     }
 }

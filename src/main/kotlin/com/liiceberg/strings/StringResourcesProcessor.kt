@@ -3,6 +3,7 @@ package com.liiceberg.strings
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.vfs.VirtualFile
+import com.liiceberg.strings.detector.TemplateDetector
 import com.liiceberg.strings.translator.LanguageDetector
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.strings.translator.Translator
@@ -24,8 +25,12 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
         hardcodedStrings.forEach { str ->
             ProgressManager.checkCanceled()
             val sourceLanguage = LanguageDetector.detect(str)
-            val stringResourceKey = getKey(str, sourceLanguage, keysToAddInStringXML, onTranslationStarted = onTranslationStarted)
-            keysToAddInStringXML.add(stringResourceKey)
+            val stringResourceKey = if (containsLetters(str)) {
+                getKey(str, sourceLanguage, keysToAddInStringXML, onTranslationStarted = onTranslationStarted)
+            } else ""
+            if (stringResourceKey.isNotBlank()) {
+                keysToAddInStringXML.add(stringResourceKey)
+            }
             entries.add(
                 HardcodedStringEntity(
                     stringResourceKey,
@@ -48,8 +53,16 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
         repeatCount: Int = 0,
         onTranslationStarted: (String) -> Unit = {},
     ): String {
-        val englishText = translateToEnglishIfNeeded(originalText, sourceLanguage, onTranslationStarted)
+        val textForKey = stripTemplateParameters(originalText)
+        if (!containsLetters(textForKey)) {
+            return ""
+        }
+
+        val englishText = translateToEnglishIfNeeded(textForKey, sourceLanguage, onTranslationStarted) ?: return ""
         val baseKey = normalizeText(englishText)
+        if (baseKey.isBlank()) {
+            return ""
+        }
 
         val candidateKey = if (repeatCount == 0) baseKey else "${baseKey}_$repeatCount"
 
@@ -69,7 +82,7 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
         originalText: String,
         sourceLanguage: SupportedAppLanguage?,
         onTranslationStarted: (String) -> Unit,
-    ): String {
+    ): String? {
         if (!shouldTranslateToEnglish(originalText, sourceLanguage)) {
             return originalText
         }
@@ -82,7 +95,7 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
                 sourceLanguage = detectedLanguage,
                 targetLanguage = SupportedAppLanguage.ENGLISH,
             )
-        }.getOrDefault(originalText)
+        }.getOrNull()
     }
 
     private fun shouldTranslateToEnglish(
@@ -92,21 +105,34 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
         if (sourceLanguage == null || sourceLanguage == SupportedAppLanguage.ENGLISH) {
             return false
         }
-
         val letters = originalText.filter { it.isLetter() }
-        if (letters.isEmpty()) return false
-
         return letters.any {
             Character.UnicodeScript.of(it.code) != Character.UnicodeScript.LATIN
         }
     }
 
+    private fun containsLetters(originalText: String): Boolean {
+        return originalText.any { it.isLetter() }
+    }
+
+    private fun stripTemplateParameters(originalText: String): String {
+        return TemplateDetector.patterns
+            .fold(originalText) { acc, pattern -> pattern.replace(acc, " ") }
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
     private fun normalizeText(originalText: String): String {
         return Constants.RegexTemplates.KEY_GENERATOR_REGEX
             .replace(originalText, "")
-            .replace(" ", "_")
+            .replace(Regex("\\s+"), "_")
+            .replace(Regex("_+"), "_")
+            .trim('_')
             .lowercase()
             .let { cleanedText ->
+                if (cleanedText.isBlank()) {
+                    return ""
+                }
                 if (cleanedText.length <= MAX_KEY_LENGTH) {
                     cleanedText
                 } else {
