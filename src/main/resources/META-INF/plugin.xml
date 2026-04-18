@@ -35,6 +35,16 @@
                     class="com.liiceberg.StringWielder"
                     text="Extract String Resources"
                     description="Helps extracting hardcoded string resources"/>
+
+            <action id="StringWielder.TranslateExistingResources"
+                    class="com.liiceberg.TranslateExistingResourcesAction"
+                    text="Translate Existing Resources"
+                    description="Fills missing translations in existing locale resource files"/>
+
+            <action id="StringWielder.SyncResourcesToAllAppLocales"
+                    class="com.liiceberg.SyncResourcesToAllAppLocalesAction"
+                    text="Sync Resources To All App Locales"
+                    description="Creates missing locale files from app locale set and fills missing translations"/>
         </group>
 
     </actions>

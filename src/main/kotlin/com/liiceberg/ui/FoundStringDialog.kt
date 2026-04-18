@@ -31,9 +31,9 @@ class FoundStringDialog(
     private val project: Project,
     private val entries: List<HardcodedStringEntity>,
     private val isDeepAnalyze: Boolean = true,
+    private val searchUtil: SearchUtil = SearchUtil(project),
 ) : DialogWrapper(project) {
 
-    private val searchUtil = SearchUtil(project)
     private val duplicateRefreshRequests = mutableMapOf<Int, Int>()
     private val tableModel = FoundStringTableModel(entries, ::onLanguageChanged)
     private val stringsTable = JBTable(tableModel)
@@ -59,9 +59,9 @@ class FoundStringDialog(
     }
 
     override fun doOKAction() {
-
-        if (errorLabel.text.isNotEmpty()) return
-
+        if (!validateEntries() ) {
+            return
+        }
         val baseLanguage = baseLanguageComboBox.selectedItem as? SupportedAppLanguage
             ?: SupportedAppLanguage.ENGLISH
         LocalStorage.setData(Constants.Preferences.BASE_LANGUAGE, baseLanguage.name)
@@ -205,7 +205,7 @@ class FoundStringDialog(
 
             })
 
-            if (entries.any { entry -> !entry.key.matches(Constants.RegexTemplates.KEY_REGEX) }) {
+            if (entries.any { entry -> entry.isSelected && !entry.key.matches(Constants.RegexTemplates.KEY_REGEX) }) {
                 errorLabel.text = Constants.Labels.INVALID_KEYS_FOUND
             }
 
@@ -306,7 +306,18 @@ class FoundStringDialog(
                 entity.existingResource = null
             }
         }
-        println(entity)
+    }
+
+    private fun validateEntries(): Boolean {
+        val hasInvalidSelectedEntries = entries.any { entry ->
+            entry.isSelected && !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
+        }
+        errorLabel.text = if (hasInvalidSelectedEntries) {
+            Constants.Labels.INVALID_KEYS_FOUND
+        } else {
+            ""
+        }
+        return !hasInvalidSelectedEntries
     }
 
     private companion object {

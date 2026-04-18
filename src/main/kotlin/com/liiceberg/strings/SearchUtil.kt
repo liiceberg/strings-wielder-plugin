@@ -19,6 +19,7 @@ import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.utils.getAndroidPackageName
 import com.liiceberg.utils.getResourceDependencies
 import me.xdrop.fuzzywuzzy.FuzzySearch
+import java.util.concurrent.ConcurrentHashMap
 
 class SearchUtil(project: Project) {
 
@@ -38,14 +39,23 @@ class SearchUtil(project: Project) {
     private val psiManager = PsiManager.getInstance(project)
     private val semanticDuplicateSearcher = SemanticDuplicateSearcher()
     private val quantityValues = listOf(QUANTITY_OTHER, QUANTITY_MANY, QUANTITY_FEW, QUANTITY_ONE, QUANTITY_ZERO)
-    private val resourceCache = mutableMapOf<String, List<IndexedResource>>()
+    private val indexedResourceCache = ConcurrentHashMap<String, List<IndexedResource>>()
+    private val scopedResourceCache = ConcurrentHashMap<ResourceScopeKey, Map<String, List<SearchResult>>>()
+    private val exactSearchCache = ConcurrentHashMap<SearchRequestKey, List<SearchResult>>()
+    private val deepSearchCache = ConcurrentHashMap<SearchRequestKey, List<SearchResult>>()
 
     fun deepSearch(
         module: Module,
         string: String,
         sourceLanguage: SupportedAppLanguage?,
     ): List<SearchResult> {
-        return (fuzzySearch(module, string, sourceLanguage) + semanticSearch(module, string, sourceLanguage)).toSet().toList()
+        val normalizedQuery = normalizeStringForSearch(string)
+        val cacheKey = SearchRequestKey(module.name, normalizedQuery, sourceLanguage)
+        return deepSearchCache.computeIfAbsent(cacheKey) {
+            deduplicateResults(
+                fuzzySearch(module, string, sourceLanguage) + semanticSearch(module, string, sourceLanguage)
+            )
+        }
     }
 
     fun search(
@@ -53,11 +63,15 @@ class SearchUtil(project: Project) {
         string: String,
         sourceLanguage: SupportedAppLanguage?,
     ): SearchResult? {
-        val queries = buildSearchQueries(string, sourceLanguage)
-        queries.forEach { query ->
-            getResources(module, query.scopes)[normalizeStringForSearch(query.text)]?.firstOrNull()?.let { return it }
+        val normalizedQuery = normalizeStringForSearch(string)
+        val cacheKey = SearchRequestKey(module.name, normalizedQuery, sourceLanguage)
+        val cached = exactSearchCache.computeIfAbsent(cacheKey) {
+            val queries = buildSearchQueries(string, sourceLanguage)
+            queries.firstNotNullOfOrNull { query ->
+                getResources(module, query.scopes)[normalizeStringForSearch(query.text)]?.firstOrNull()
+            }?.let(::listOf).orEmpty()
         }
-        return null
+        return cached.firstOrNull()
     }
 
     private fun fuzzySearch(
@@ -67,20 +81,14 @@ class SearchUtil(project: Project) {
     ): List<SearchResult> {
         return buildSearchQueries(string, sourceLanguage)
             .flatMap { query ->
+                ProgressManager.checkCanceled()
                 val resources = getResources(module, query.scopes)
                 val normalizedQuery = normalizeStringForSearch(query.text)
                 FuzzySearch
                     .extractAll(normalizedQuery, resources.keys, MIN_THRESHOLD)
                     .flatMap { resources[it.string].orEmpty() }
             }
-            .distinctBy { result ->
-                DuplicateResourceKey(
-                    moduleName = result.module.name,
-                    packageName = result.packageName,
-                    key = result.key,
-                    resourceType = result.resourceType,
-                )
-            }
+            .let(::deduplicateResults)
     }
 
     private fun semanticSearch(
@@ -90,23 +98,17 @@ class SearchUtil(project: Project) {
     ): List<SearchResult> {
         return buildSearchQueries(string, sourceLanguage)
             .flatMap { query ->
+                ProgressManager.checkCanceled()
                 val q = normalizeStringForSearch(query.text)
-                getResources(module, query.scopes).values.flatten().filter { candidate ->
-                    semanticDuplicateSearcher.isSemanticDuplicate(q, normalizeStringForSearch(candidate.value))
-                }
+                val resources = getResources(module, query.scopes)
+                val matchedValues = semanticDuplicateSearcher.findSemanticDuplicates(q, resources.keys.toList())
+                matchedValues.flatMap { resources[it].orEmpty() }
             }
-            .distinctBy { result ->
-                DuplicateResourceKey(
-                    moduleName = result.module.name,
-                    packageName = result.packageName,
-                    key = result.key,
-                    resourceType = result.resourceType,
-                )
-            }
+            .let(::deduplicateResults)
     }
 
     private fun getIndexedResources(module: Module): List<IndexedResource> {
-        return resourceCache.getOrPut(module.name) {
+        return indexedResourceCache.computeIfAbsent(module.name) {
             buildResourcesForModule(module)
         }
     }
@@ -115,13 +117,17 @@ class SearchUtil(project: Project) {
         module: Module,
         scopes: List<ResourceDirectoryLanguage>,
     ): Map<String, List<SearchResult>> {
-        return buildMap {
-            scopes.distinct().forEach { scope ->
-                getIndexedResources(module)
-                    .filter { it.directoryLanguage == scope }
-                    .forEach { indexed ->
-                        addResult(indexed.result)
-                    }
+        val normalizedScopes = scopes.distinct()
+        val cacheKey = ResourceScopeKey(module.name, normalizedScopes)
+        return scopedResourceCache.computeIfAbsent(cacheKey) {
+            buildMap {
+                normalizedScopes.forEach { scope ->
+                    getIndexedResources(module)
+                        .filter { it.directoryLanguage == scope }
+                        .forEach { indexed ->
+                            addResult(indexed.result)
+                        }
+                }
             }
         }
     }
@@ -137,65 +143,61 @@ class SearchUtil(project: Project) {
         return buildList {
             accessibleModules.forEach { currentModule ->
                 ProgressManager.checkCanceled()
-                val packageName = ApplicationManager.getApplication().runReadAction<String?> {
-                    currentModule.getAndroidPackageName()
-                }
-                ModuleFileFinder.getModuleStringFiles(currentModule)
-                    .distinctBy { it.path }
-                    .mapNotNull { file ->
-                        ApplicationManager.getApplication().runReadAction<XmlFile?> {
-                            psiManager.findFile(file) as? XmlFile
-                        }
-                    }
-                    .forEach { file ->
-                        ApplicationManager.getApplication().runReadAction {
-                            val directoryLanguage = resolveDirectoryLanguage(file)
-                            if (directoryLanguage == ResourceDirectoryLanguage.Unsupported) {
-                                return@runReadAction
-                            }
+                addAll(
+                    ApplicationManager.getApplication().runReadAction<List<IndexedResource>> {
+                        val packageName = currentModule.getAndroidPackageName()
+                        ModuleFileFinder.getModuleStringFiles(currentModule)
+                            .distinctBy { it.path }
+                            .mapNotNull { file -> psiManager.findFile(file) as? XmlFile }
+                            .flatMap { file ->
+                                val directoryLanguage = resolveDirectoryLanguage(file)
+                                if (directoryLanguage == ResourceDirectoryLanguage.Unsupported) {
+                                    return@flatMap emptyList()
+                                }
 
-                            file.rootTag?.subTags?.forEach { tag ->
-                                when (tag.name) {
-                                    StringsXmlManager.STRING_TAG -> {
-                                        val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) ?: return@forEach
-                                        val value = tag.value.trimmedText
-                                        if (value.isNotBlank()) {
-                                            add(
+                                file.rootTag?.subTags?.mapNotNull { tag ->
+                                    when (tag.name) {
+                                        StringsXmlManager.STRING_TAG -> {
+                                            val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) ?: return@mapNotNull null
+                                            val value = tag.value.trimmedText
+                                            value.takeIf { it.isNotBlank() }?.let {
                                                 IndexedResource(
                                                     result = SearchResult(
                                                         module = currentModule,
                                                         packageName = packageName,
                                                         key = key,
-                                                        value = value,
+                                                        value = it,
                                                         resourceType = ResourceType.STRING,
                                                     ),
                                                     directoryLanguage = directoryLanguage,
                                                 )
-                                            )
+                                            }
                                         }
-                                    }
 
-                                    StringsXmlManager.PLURAL_TAG -> {
-                                        val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) ?: return@forEach
-                                        resolvePluralPreview(tag.findSubTags(StringsXmlManager.ITEM_TAG))?.takeIf { it.isNotBlank() }?.let { value ->
-                                            add(
-                                                IndexedResource(
-                                                    result = SearchResult(
-                                                        module = currentModule,
-                                                        packageName = packageName,
-                                                        key = key,
-                                                        value = value,
-                                                        resourceType = ResourceType.PLURAL,
-                                                    ),
-                                                    directoryLanguage = directoryLanguage,
-                                                )
-                                            )
+                                        StringsXmlManager.PLURAL_TAG -> {
+                                            val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) ?: return@mapNotNull null
+                                            resolvePluralPreview(tag.findSubTags(StringsXmlManager.ITEM_TAG))
+                                                ?.takeIf { it.isNotBlank() }
+                                                ?.let { value ->
+                                                    IndexedResource(
+                                                        result = SearchResult(
+                                                            module = currentModule,
+                                                            packageName = packageName,
+                                                            key = key,
+                                                            value = value,
+                                                            resourceType = ResourceType.PLURAL,
+                                                        ),
+                                                        directoryLanguage = directoryLanguage,
+                                                    )
+                                                }
                                         }
+
+                                        else -> null
                                     }
-                                }
+                                }.orEmpty()
                             }
-                        }
                     }
+                )
             }
         }
     }
@@ -226,20 +228,10 @@ class SearchUtil(project: Project) {
     private fun MutableMap<String, List<SearchResult>>.addResult(result: SearchResult) {
         val normalizedValue = normalizeStringForSearch(result.value)
         val currentValues = this[normalizedValue].orEmpty()
-        val duplicateKey = DuplicateResourceKey(
-            moduleName = result.module.name,
-            packageName = result.packageName,
-            key = result.key,
-            resourceType = result.resourceType,
-        )
+        val duplicateKey = result.duplicateKey()
 
         if (currentValues.any { current ->
-                DuplicateResourceKey(
-                    moduleName = current.module.name,
-                    packageName = current.packageName,
-                    key = current.key,
-                    resourceType = current.resourceType,
-                ) == duplicateKey
+                current.duplicateKey() == duplicateKey
             }) {
             return
         }
@@ -276,6 +268,19 @@ class SearchUtil(project: Project) {
         return SupportedAppLanguage.resolveResourceDirectory(directoryName)
     }
 
+    private fun deduplicateResults(results: List<SearchResult>): List<SearchResult> {
+        return results.distinctBy { it.duplicateKey() }
+    }
+
+    private fun SearchResult.duplicateKey(): DuplicateResourceKey {
+        return DuplicateResourceKey(
+            moduleName = module.name,
+            packageName = packageName,
+            key = key,
+            resourceType = resourceType,
+        )
+    }
+
     private data class IndexedResource(
         val result: SearchResult,
         val directoryLanguage: ResourceDirectoryLanguage,
@@ -283,6 +288,17 @@ class SearchUtil(project: Project) {
 
     private data class SearchQuery(
         val text: String,
+        val scopes: List<ResourceDirectoryLanguage>,
+    )
+
+    private data class SearchRequestKey(
+        val moduleName: String,
+        val normalizedQuery: String,
+        val sourceLanguage: SupportedAppLanguage?,
+    )
+
+    private data class ResourceScopeKey(
+        val moduleName: String,
         val scopes: List<ResourceDirectoryLanguage>,
     )
 

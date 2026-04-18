@@ -4,9 +4,10 @@ import com.liiceberg.model.PluralResource
 import com.liiceberg.model.Resource
 import com.liiceberg.model.StringResource
 import com.liiceberg.strings.translator.model.TranslateRequest
+import java.util.concurrent.ConcurrentHashMap
 
 class Translator {
-    private val cache = mutableMapOf<TranslationCacheKey, String>()
+    private val cache = ConcurrentHashMap<TranslationCacheKey, String>()
 
     suspend fun translate(
         text: String,
