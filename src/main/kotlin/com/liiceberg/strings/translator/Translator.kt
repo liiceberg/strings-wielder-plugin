@@ -4,6 +4,7 @@ import com.liiceberg.model.PluralResource
 import com.liiceberg.model.Resource
 import com.liiceberg.model.StringResource
 import com.liiceberg.strings.translator.model.TranslateRequest
+import kotlinx.coroutines.delay
 import java.util.concurrent.ConcurrentHashMap
 
 class Translator {
@@ -19,13 +20,8 @@ class Translator {
         val cacheKey = TranslationCacheKey(text, sourceLanguage, targetLanguage)
         cache[cacheKey]?.let { return it }
 
-        val translatedText = ApiClient.api.translate(
-            TranslateRequest(
-                text = text,
-                sourceLang = sourceLanguage.mbartCode,
-                targetLang = targetLanguage.mbartCode,
-            )
-        ).translation
+        val translatedText = cache[cacheKey] ?: retryTranslate(text, sourceLanguage, targetLanguage)
+
 
         cache[cacheKey] = translatedText
         return translatedText
@@ -71,4 +67,36 @@ class Translator {
         val sourceLanguage: SupportedAppLanguage,
         val targetLanguage: SupportedAppLanguage,
     )
+
+    private suspend fun retryTranslate(
+        text: String,
+        sourceLanguage: SupportedAppLanguage,
+        targetLanguage: SupportedAppLanguage,
+    ): String {
+        var lastError: Throwable? = null
+
+        repeat(MAX_RETRY_ATTEMPTS) { attempt ->
+            try {
+                return ApiClient.api.translate(
+                    TranslateRequest(
+                        text = text,
+                        sourceLang = sourceLanguage.mbartCode,
+                        targetLang = targetLanguage.mbartCode,
+                    )
+                ).translation
+            } catch (error: Throwable) {
+                lastError = error
+                if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+                    delay(RETRY_DELAY_MS * (attempt + 1))
+                }
+            }
+        }
+
+        throw lastError ?: IllegalStateException("Translation failed without explicit error")
+    }
+
+    private companion object {
+        private const val MAX_RETRY_ATTEMPTS = 3
+        private const val RETRY_DELAY_MS = 150L
+    }
 }
