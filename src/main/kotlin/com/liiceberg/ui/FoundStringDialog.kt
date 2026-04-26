@@ -1,5 +1,7 @@
 package com.liiceberg.ui
 
+import ai.grazie.text.TextRange
+import ai.grazie.text.replace
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.progress.ProgressManager
@@ -13,6 +15,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
 import com.liiceberg.strings.SearchUtil
 import com.liiceberg.strings.StringResourceReplacer
+import com.liiceberg.strings.detector.PatternType
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.ui.entity.SuggestionType
@@ -35,7 +38,7 @@ class FoundStringDialog(
 ) : DialogWrapper(project) {
 
     private val duplicateRefreshRequests = mutableMapOf<Int, Int>()
-    private val tableModel = FoundStringTableModel(entries, ::onLanguageChanged)
+    private val tableModel = FoundStringTableModel(entries, ::onLanguageChanged, ::refreshValidationError)
     private val stringsTable = JBTable(tableModel)
     private val baseLanguageComboBox = ComboBox(
         SupportedAppLanguage.baseLanguageValues.toTypedArray()
@@ -50,6 +53,9 @@ class FoundStringDialog(
 
     init {
         title = Constants.Titles.HARDCODED_STRINGS_FOUND_TABLE
+        tableModel.addTableModelListener {
+            refreshValidationError()
+        }
         init()
     }
 
@@ -59,7 +65,7 @@ class FoundStringDialog(
     }
 
     override fun doOKAction() {
-        if (!validateEntries() ) {
+        if (!validateEntries()) {
             return
         }
         val baseLanguage = baseLanguageComboBox.selectedItem as? SupportedAppLanguage
@@ -194,20 +200,21 @@ class FoundStringDialog(
                 override fun stopCellEditing(): Boolean {
                     val col = editingColumn
                     val value = (component as JTextField).text
-                    return if (col == 0 && !value.matches(Constants.RegexTemplates.KEY_REGEX)) {
+                    val entity = entries.getOrNull(editingRow)
+                    val shouldValidateKey = col == 0 && entity?.isSelected == true && entity.existingResource == null
+
+                    return if (shouldValidateKey && !value.matches(Constants.RegexTemplates.KEY_REGEX)) {
                         errorLabel.text = Constants.Labels.INVALID_KEY_FILED
                         false
                     } else {
-                        errorLabel.text = ""
+                        refreshValidationError()
                         super.stopCellEditing()
                     }
                 }
 
             })
 
-            if (entries.any { entry -> entry.isSelected && !entry.key.matches(Constants.RegexTemplates.KEY_REGEX) }) {
-                errorLabel.text = Constants.Labels.INVALID_KEYS_FOUND
-            }
+            refreshValidationError()
 
             val scrollPane = JBScrollPane(stringsTable)
             val wrapper = JPanel()
@@ -229,22 +236,27 @@ class FoundStringDialog(
 
         when {
             SuggestionType.PLURAL in entity.suggestions -> {
-                PluralDialog(project, entity).show()
-                entity.suggestions.remove(SuggestionType.PLURAL)
+                if (PluralDialog(project, entity).showAndGet()) {
+                    entity.suggestions.remove(SuggestionType.PLURAL)
+                }
             }
 
             SuggestionType.DUPLICATE in entity.suggestions -> {
-                DuplicateDialog(project, entity).show()
-                entity.suggestions.remove(SuggestionType.DUPLICATE)
+                if (DuplicateDialog(project, entity).showAndGet()) {
+                    entity.suggestions.remove(SuggestionType.DUPLICATE)
+                }
             }
 
             SuggestionType.TEMPLATE in entity.suggestions -> {
-                TemplateConfirmDialog(project, entity).show()
-                entity.suggestions.remove(SuggestionType.TEMPLATE)
+                if (TemplateConfirmDialog(project, entity).showAndGet()) {
+                    entity.value = buildTemplateResourceValue(entity)
+                    entity.suggestions.remove(SuggestionType.TEMPLATE)
+                }
             }
         }
 
         tableModel.fireTableRowsUpdated(row, row)
+        refreshValidationError()
     }
 
     private fun onLanguageChanged(row: Int, language: SupportedAppLanguage?) {
@@ -310,14 +322,38 @@ class FoundStringDialog(
 
     private fun validateEntries(): Boolean {
         val hasInvalidSelectedEntries = entries.any { entry ->
-            entry.isSelected && !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
+            entry.isSelected &&
+                entry.existingResource == null &&
+                !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
         }
-        errorLabel.text = if (hasInvalidSelectedEntries) {
-            Constants.Labels.INVALID_KEYS_FOUND
-        } else {
-            ""
-        }
+        refreshValidationError()
         return !hasInvalidSelectedEntries
+    }
+
+    private fun refreshValidationError() {
+        val hasInvalidSelectedEntries = entries.any { entry ->
+            entry.isSelected &&
+                entry.existingResource == null &&
+                !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
+        }
+
+        errorLabel.text = if (hasInvalidSelectedEntries) Constants.Labels.INVALID_KEYS_FOUND else ""
+    }
+
+    private fun buildTemplateResourceValue(entity: HardcodedStringEntity): String {
+        val templatePatterns = entity.patterns
+            .filter { it.type == PatternType.TEMPLATE }
+            .sortedByDescending { it.range.first }
+
+        var result = entity.sourceValue
+        templatePatterns.forEach { pattern ->
+            val replacement = pattern.templateFormat ?: pattern.value
+            result = result.replace(
+                TextRange(pattern.range.first, pattern.range.last + 1),
+                replacement
+            )
+        }
+        return result
     }
 
     private companion object {

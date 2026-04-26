@@ -13,6 +13,7 @@ data class HardcodedStringEntity(
     var isSelected: Boolean,
     val virtualFile: VirtualFile,
     val module: Module,
+    val sourceValue: String = value,
     val suggestions: MutableSet<SuggestionType> = mutableSetOf(),
     var duplicateOf: List<SearchUtil.SearchResult>? = null,
     var existingResource: SearchUtil.SearchResult? = null,

@@ -145,4 +145,10 @@ class DuplicateDialog(
         return panel
     }
 
+    override fun doCancelAction() {
+        entity.key = originalKey
+        entity.existingResource = originalExistingResource
+        super.doCancelAction()
+    }
+
 }

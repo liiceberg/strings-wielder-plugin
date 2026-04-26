@@ -47,7 +47,7 @@ class StringResourceReplacer(
                 addImports(importsList, it)
                 val stringsToReplace = buildMap {
                     entityList.forEach { entity ->
-                        put(entity.value, entity)
+                        put(entity.sourceValue, entity)
                     }
                 }
                 replaceInKotlinFile(stringsToReplace, it)
@@ -109,7 +109,7 @@ class StringResourceReplacer(
                 if (entity.pluralForm != null) {
                     entity
                 } else {
-                    entity.copy(value = buildResourceValue(entity))
+                    entity.copy(value = resolveFinalResourceValue(entity))
                 }
             }
             StringsXmlManager(project, module, preparedEntities, baseLanguage).update(onTranslationStarted)
@@ -176,7 +176,7 @@ class StringResourceReplacer(
             .filter { it.type == PatternType.TEMPLATE }
             .sortedByDescending { it.range.first }
 
-        var result = entity.value
+        var result = entity.sourceValue
         templatePatterns.forEach { pattern ->
             val replacement = pattern.templateFormat ?: pattern.value
             result = result.replace(
@@ -185,6 +185,14 @@ class StringResourceReplacer(
             )
         }
         return result
+    }
+
+    private fun resolveFinalResourceValue(entity: HardcodedStringEntity): String {
+        return if (entity.value != entity.sourceValue) {
+            entity.value
+        } else {
+            buildResourceValue(entity)
+        }
     }
 
     private fun buildTemplateArguments(entity: HardcodedStringEntity): List<String> {

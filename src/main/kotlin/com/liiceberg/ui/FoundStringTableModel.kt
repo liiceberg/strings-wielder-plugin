@@ -8,6 +8,7 @@ import javax.swing.table.AbstractTableModel
 class FoundStringTableModel(
     private val entries: List<HardcodedStringEntity>,
     private val onLanguageChanged: (Int, SupportedAppLanguage?) -> Unit = { _, _ -> },
+    private val onEntryChanged: () -> Unit = {},
 ) : AbstractTableModel() {
 
     private val colNames = arrayOf("Key", "Value", "Language", "Add to strings.xml", "Suggestions", "Action")
@@ -40,6 +41,14 @@ class FoundStringTableModel(
     override fun getColumnClass(columnIndex: Int): Class<*> = colClasses[columnIndex]
 
     override fun isCellEditable(rowIndex: Int, columnIndex: Int): Boolean {
+        if (columnIndex == 4) {
+            return false
+        }
+
+        if (entries[rowIndex].existingResource != null && columnIndex in setOf(0, 1)) {
+            return false
+        }
+
         return columnIndex != 4
     }
 
@@ -57,6 +66,7 @@ class FoundStringTableModel(
             3 -> entries[rowIndex].isSelected = aValue as Boolean
         }
         fireTableRowsUpdated(rowIndex, rowIndex)
+        onEntryChanged()
     }
 
     private fun buildSuggestionText(e: HardcodedStringEntity): String {
