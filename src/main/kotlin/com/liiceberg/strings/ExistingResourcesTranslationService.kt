@@ -200,12 +200,14 @@ class ExistingResourcesTranslationService(
                     if (existingState.strings.contains(entry.key)) return@forEach
 
                     val translated = translateResource(entry.resource, baseLanguage, targetLanguage, entry.key, onTranslationStarted)
+                        ?: return@forEach
                     addMissingResource(file, entry.key, translated)
                     existingState.strings += entry.key
                 }
 
                 is PluralResource -> {
                     val translated = translateResource(entry.resource, baseLanguage, targetLanguage, entry.key, onTranslationStarted)
+                        ?: return@forEach
                     val existingQuantities = existingState.plurals[entry.key].orEmpty()
                     if (hasAllPluralQuantities(translated, existingQuantities)) return@forEach
 
@@ -226,13 +228,15 @@ class ExistingResourcesTranslationService(
         targetLanguage: SupportedAppLanguage,
         key: String,
         onTranslationStarted: (String) -> Unit,
-    ): Resource {
+    ): Resource? {
         if (baseLanguage == targetLanguage) {
             return resource
         }
 
         onTranslationStarted("$key -> ${targetLanguage.displayName}")
-        return translator.translate(resource, baseLanguage, targetLanguage)
+        return runCatching {
+            translator.translate(resource, baseLanguage, targetLanguage)
+        }.getOrNull()
     }
 
     private fun addMissingResource(
@@ -274,9 +278,10 @@ class ExistingResourcesTranslationService(
     ) {
         val pluralTag = rootTag.findSubTags(StringsXmlManager.PLURAL_TAG).firstOrNull {
             it.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) == key
-        } ?: rootTag.createChildTag(StringsXmlManager.PLURAL_TAG, rootTag.namespace, null, false).also {
-            it.setAttribute(StringsXmlManager.NAME_TAG_ATTRIBUTE, key)
-            rootTag.addSubTag(it, false)
+        } ?: run {
+            val newTag = rootTag.createChildTag(StringsXmlManager.PLURAL_TAG, rootTag.namespace, null, false)
+            newTag.setAttribute(StringsXmlManager.NAME_TAG_ATTRIBUTE, key)
+            rootTag.addSubTag(newTag, false)
         }
 
         addMissingPluralItem(rootTag, pluralTag, StringsXmlManager.QUANTITY_ZERO, value.zero)

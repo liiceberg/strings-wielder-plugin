@@ -82,7 +82,11 @@ class StringsXmlManager(
             else -> {
                 onTranslationStarted("${entity.key} -> ${baseLanguage.displayName}")
                 PreparedResource(
-                    resource = translator.translate(resource, sourceLanguage, baseLanguage)
+                    resource = runCatching {
+                        translator.translate(resource, sourceLanguage, baseLanguage)
+                    }.getOrElse {
+                        resource
+                    }
                 )
             }
         }
@@ -104,7 +108,9 @@ class StringsXmlManager(
             resource
         } else {
             onTranslationStarted("${entity.key} -> ${targetLanguage.displayName}")
-            translator.translate(resource, sourceLanguage, targetLanguage)
+            runCatching {
+                translator.translate(resource, sourceLanguage, targetLanguage)
+            }.getOrNull()
         }
     }
 
@@ -158,9 +164,10 @@ class StringsXmlManager(
     ) {
         val existingTag = rootTag.findSubTags(PLURAL_TAG).firstOrNull {
             it.getAttributeValue(NAME_TAG_ATTRIBUTE) == key
-        } ?: rootTag.createChildTag(PLURAL_TAG, rootTag.namespace, null, false).also {
-            it.setAttribute(NAME_TAG_ATTRIBUTE, key)
-            rootTag.addSubTag(it, false)
+        } ?: run {
+            val newTag = rootTag.createChildTag(PLURAL_TAG, rootTag.namespace, null, false)
+            newTag.setAttribute(NAME_TAG_ATTRIBUTE, key)
+            rootTag.addSubTag(newTag, false)
         }
 
         applyTranslatableAttribute(existingTag, translatable)
