@@ -310,6 +310,6 @@ class SearchUtil(project: Project) {
     )
 
     private companion object {
-        const val MIN_THRESHOLD = 95
+        const val MIN_THRESHOLD = 90
     }
 }
