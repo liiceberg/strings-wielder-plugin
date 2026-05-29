@@ -27,8 +27,9 @@
 
     <actions>
         <group id="StringWielder.TopMenu"
-               text="Tools"
-               description="String-wielder toolbar menu">
+               text="String Wielder"
+               description="String-wielder toolbar menu"
+               popup="true">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <action id="StringWielder"
@@ -40,6 +41,11 @@
                     class="com.liiceberg.TranslateExistingResourcesAction"
                     text="Translate Existing Resources"
                     description="Fills missing translations in existing locale resource files"/>
+
+            <action id="StringWielder.AnalyzeExistingResources"
+                    class="com.liiceberg.AnalyzeExistingResourcesAction"
+                    text="Analyze Existing Resources"
+                    description="Finds duplicates and detects template/plural candidates in existing resources"/>
 
             <action id="StringWielder.SyncResourcesToAllAppLocales"
                     class="com.liiceberg.SyncResourcesToAllAppLocalesAction"

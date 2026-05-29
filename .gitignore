@@ -37,3 +37,6 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+/.intellijPlatform/localPlatformArtifacts/*
+/.run/Run IDE with Plugin.run.xml
+/.intellijPlatform/self-update.lock
