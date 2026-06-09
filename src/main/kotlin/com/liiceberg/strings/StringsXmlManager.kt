@@ -14,6 +14,7 @@ import com.liiceberg.model.PluralResource
 import com.liiceberg.model.Resource
 import com.liiceberg.model.StringResource
 import com.liiceberg.module.ModuleFileFinder
+import com.liiceberg.strings.SearchUtil.ResourceType
 import com.liiceberg.strings.translator.ResourceDirectoryLanguage
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.strings.translator.Translator
@@ -42,7 +43,7 @@ class StringsXmlManager(
                 ResourceDirectoryLanguage.Default -> {
                     entries.forEach { entity ->
                         ProgressManager.checkCanceled()
-                        buildBaseResource(entity, onTranslationStarted)?.let { prepared ->
+                        buildBaseResource(entity, onTranslationStarted).let { prepared ->
                             addOrUpdateString(file, entity.key, prepared.resource, prepared.translatable)
                         }
                     }
@@ -153,7 +154,7 @@ class StringsXmlManager(
         applyTranslatableAttribute(existingTag, translatable)
         val tagValue = existingTag.value
         tagValue.textElements.forEach { it.delete() }
-        tagValue.setText(value.value)
+        tagValue.text = value.value
     }
 
     private fun addOrUpdatePlural(
@@ -202,7 +203,7 @@ class StringsXmlManager(
 
         val tagValue = existingItem.value
         tagValue.textElements.forEach { it.delete() }
-        tagValue.setText(value)
+        tagValue.text = value
     }
 
     private fun applyTranslatableAttribute(tag: XmlTag, translatable: Boolean) {
@@ -217,6 +218,43 @@ class StringsXmlManager(
         WriteCommandAction.runWriteCommandAction(project) {
             codeStyleManager.reformat(psiFile)
         }
+    }
+
+    fun deleteResources(resources: List<ResourceDeletionRequest>): Int {
+        var deletedCount = 0
+        getResourcesFiles().forEach { file ->
+            ProgressManager.checkCanceled()
+            if (!isResourcesFile(file)) return@forEach
+
+            val deletedInFile = deleteResourcesFromFile(file, resources)
+            if (deletedInFile > 0) {
+                deletedCount += deletedInFile
+                reformatFile(file)
+            }
+        }
+        return deletedCount
+    }
+
+    private fun deleteResourcesFromFile(
+        file: XmlFile,
+        resources: List<ResourceDeletionRequest>,
+    ): Int {
+        var deletedCount = 0
+        WriteCommandAction.runWriteCommandAction(project) {
+            val rootTag = file.rootTag ?: return@runWriteCommandAction
+            resources.forEach { resource ->
+                val tagName = when (resource.resourceType) {
+                    ResourceType.STRING -> STRING_TAG
+                    ResourceType.PLURAL -> PLURAL_TAG
+                }
+                val tag = rootTag.findSubTags(tagName).firstOrNull {
+                    it.getAttributeValue(NAME_TAG_ATTRIBUTE) == resource.key
+                } ?: return@forEach
+                tag.delete()
+                deletedCount += 1
+            }
+        }
+        return deletedCount
     }
 
     private fun getResourcesFiles(): List<XmlFile> {
@@ -269,6 +307,11 @@ class StringsXmlManager(
     private data class PreparedResource(
         val resource: Resource,
         val translatable: Boolean = true,
+    )
+
+    data class ResourceDeletionRequest(
+        val key: String,
+        val resourceType: ResourceType,
     )
 
     companion object {

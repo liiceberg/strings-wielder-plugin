@@ -12,7 +12,7 @@ class SemanticDuplicateSearcher {
     @Volatile
     private var isBatchEndpointAvailable: Boolean? = null
 
-    fun isSemanticDuplicate(
+    private fun isSemanticDuplicate(
         text: String,
         compareWith: String,
     ): Boolean {

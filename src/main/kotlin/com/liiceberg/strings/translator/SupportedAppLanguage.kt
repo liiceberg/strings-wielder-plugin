@@ -6,7 +6,7 @@ import java.util.Locale
 enum class SupportedAppLanguage(
     val displayName: String,
     val mbartCode: String,
-    val androidQualifier: String,
+    private val androidQualifier: String,
     val linguaLanguage: Language? = null,
     val isTranslatable: Boolean = true,
 ) {

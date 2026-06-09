@@ -49,7 +49,7 @@ class FoundStringTableModel(
             return false
         }
 
-        return columnIndex != 4
+        return true
     }
 
     override fun setValueAt(aValue: Any?, rowIndex: Int, columnIndex: Int) {

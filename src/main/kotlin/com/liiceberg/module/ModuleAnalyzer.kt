@@ -1,5 +1,6 @@
 package com.liiceberg.module
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.progress.ProgressManager
@@ -44,7 +45,9 @@ class ModuleAnalyzer(project: Project) {
         module: Module,
         fileSemaphore: Semaphore,
     ): ModuleContent = coroutineScope {
-        val kotlinFiles = runBlockingReadAction { ModuleFileFinder.getModuleKotlinFiles(module) }
+        val kotlinFiles = ApplicationManager.getApplication().runReadAction<List<VirtualFile>> {
+            ModuleFileFinder.getModuleKotlinFiles(module)
+        }
         val strings = kotlinFiles.map { file ->
             async {
                 fileSemaphore.withPermit {
@@ -62,10 +65,6 @@ class ModuleAnalyzer(project: Project) {
 
     private suspend fun extractStringsFromFile(file: VirtualFile): List<String> {
         return stringFinder.findHardCodedStrings(file)
-    }
-
-    private fun <T> runBlockingReadAction(action: () -> T): T {
-        return com.intellij.openapi.application.ApplicationManager.getApplication().runReadAction<T>(action)
     }
 
     private companion object {
