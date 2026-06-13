@@ -11,6 +11,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
+import com.liiceberg.model.PluralResource
 import com.liiceberg.strings.SearchUtil
 import com.liiceberg.strings.analysis.*
 import com.liiceberg.strings.detector.Pattern
@@ -71,23 +72,28 @@ class ExistingResourcesAnalysisDialog(
     }
 
     override fun doOKAction() {
-        val decisions = buildDuplicateMergeDecisions()
-        if (decisions.isEmpty()) {
-            Messages.showInfoMessage(project, "No duplicate merge selections to apply.", "String-Wielder")
+        val duplicateDecisions = buildDuplicateMergeDecisions()
+        val patternDecisions = buildPatternTransformDecisions()
+        if (duplicateDecisions.isEmpty() && patternDecisions.isEmpty()) {
+            Messages.showInfoMessage(project, "No changes selected to apply.", "String-Wielder")
             return
         }
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Applying duplicate merges", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Applying existing resource changes", true) {
             override fun run(indicator: ProgressIndicator) {
-                indicator.text = "Replacing resource references"
-                val result = ExistingResourceDuplicateMergeService(project).apply(decisions)
-                indicator.text = "Duplicate merge completed"
+                indicator.text = "Applying duplicate merges"
+                val duplicateResult = ExistingResourceDuplicateMergeService(project).apply(duplicateDecisions)
+                indicator.text = "Applying template and plural changes"
+                val patternResult = ExistingResourcePatternApplyService(project).apply(patternDecisions)
+                indicator.text = "Existing resource changes completed"
 
                 SwingUtilities.invokeLater {
                     Messages.showInfoMessage(
                         project,
-                        "Updated ${result.replacedFiles} code files and deleted ${result.deletedResources} resources." +
-                            skippedMessage(result.skippedDecisions),
+                        "Updated ${duplicateResult.replacedFiles + patternResult.changedCodeFiles} code files, " +
+                            "changed ${patternResult.updatedResourceEntries} resource entries and " +
+                            "deleted ${duplicateResult.deletedResources} resources." +
+                            skippedMessage(duplicateResult.skippedDecisions),
                         "String-Wielder",
                     )
                     close(OK_EXIT_CODE)
@@ -97,7 +103,7 @@ class ExistingResourcesAnalysisDialog(
             override fun onThrowable(error: Throwable) {
                 Messages.showErrorDialog(
                     project,
-                    error.message ?: "Failed to apply duplicate merges.",
+                    error.message ?: "Failed to apply existing resource changes.",
                     "String-Wielder",
                 )
             }
@@ -219,8 +225,9 @@ class ExistingResourcesAnalysisDialog(
             foreground = JBColor.GRAY
         }
 
+        val titleBorder = BorderFactory.createTitledBorder(finding.key)
         val panel = JPanel(BorderLayout(8, 8)).apply {
-            border = BorderFactory.createTitledBorder(finding.key)
+            border = titleBorder
             alignmentX = JComponent.LEFT_ALIGNMENT
         }
 
@@ -240,7 +247,7 @@ class ExistingResourcesAnalysisDialog(
             add(Box.createHorizontalStrut(8))
             add(JButton("Extract as plural").apply {
                 addActionListener {
-                    openPluralDialog(finding, statusLabel)
+                    openPluralDialog(finding, statusLabel, titleBorder, panel)
                 }
             })
             add(Box.createHorizontalStrut(12))
@@ -265,9 +272,14 @@ class ExistingResourcesAnalysisDialog(
         }
 
         if (TemplateConfirmDialog(project, entity).showAndGet()) {
+            val templatePatterns = entity.patterns
+                .filter { it.type == PatternType.TEMPLATE }
+                .sortedBy { it.range.first }
             patternSelections[finding.selectionKey()] = PatternActionSelection.Template(
-                key = entity.key,
+                key = finding.key,
                 value = buildTemplateResourceValue(entity),
+                templateFormats = templatePatterns.map { it.templateFormat },
+                arguments = buildTemplateArguments(templatePatterns),
             )
             statusLabel.text = patternSelections.getValue(finding.selectionKey()).label
         }
@@ -276,14 +288,21 @@ class ExistingResourcesAnalysisDialog(
     private fun openPluralDialog(
         finding: ExistingResourceFinding,
         statusLabel: JLabel,
+        titleBorder: TitledBorder,
+        panel: JComponent,
     ) {
         val entity = createEntity(finding) ?: return
 
         if (PluralDialog(project, entity).showAndGet()) {
+            val plural = entity.pluralForm ?: return
             patternSelections[finding.selectionKey()] = PatternActionSelection.Plural(
                 key = entity.key,
+                plural = plural,
             )
+            titleBorder.title = entity.key
             statusLabel.text = patternSelections.getValue(finding.selectionKey()).label
+            panel.revalidate()
+            panel.repaint()
         }
     }
 
@@ -386,6 +405,30 @@ class ExistingResourcesAnalysisDialog(
         }
     }
 
+    private fun buildPatternTransformDecisions(): List<ExistingResourcePatternDecision> {
+        return report.findings.mapNotNull { finding ->
+            val selection = patternSelections[finding.selectionKey()] ?: return@mapNotNull null
+            val action = when (selection) {
+                is PatternActionSelection.Template -> ExistingResourcePatternAction.Template(
+                    value = selection.value,
+                    templateFormats = selection.templateFormats,
+                    arguments = selection.arguments,
+                )
+                is PatternActionSelection.Plural -> ExistingResourcePatternAction.Plural(
+                    plural = selection.plural,
+                )
+            }
+
+            ExistingResourcePatternDecision(
+                moduleName = finding.moduleName,
+                filePath = finding.filePath,
+                sourceKey = finding.key,
+                targetKey = selection.key,
+                action = action,
+            )
+        }
+    }
+
     private fun DuplicateResourceItem.toResourceRef(): DuplicateResourceRef {
         return DuplicateResourceRef(
             moduleName = moduleName,
@@ -425,6 +468,23 @@ class ExistingResourcesAnalysisDialog(
                 )
             }
         return result
+    }
+
+    private fun buildTemplateArguments(patterns: List<Pattern>): List<String> {
+        return patterns.mapNotNull { pattern ->
+            when (pattern.templateFormat) {
+                "%s" -> "\"${escapeKotlinString(pattern.value)}\""
+                "%d" -> pattern.value
+                "%f" -> "${pattern.value}.0"
+                else -> null
+            }
+        }
+    }
+
+    private fun escapeKotlinString(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
     }
 
     private fun emptyLabel(text: String): JComponent {
@@ -475,17 +535,21 @@ class ExistingResourcesAnalysisDialog(
     )
 
     private sealed interface PatternActionSelection {
+        val key: String
         val label: String
 
         data class Template(
-            val key: String,
+            override val key: String,
             val value: String,
+            val templateFormats: List<String?>,
+            val arguments: List<String>,
         ) : PatternActionSelection {
             override val label: String = "Template selected: $key = \"$value\""
         }
 
         data class Plural(
-            val key: String,
+            override val key: String,
+            val plural: PluralResource,
         ) : PatternActionSelection {
             override val label: String = "Plural selected: $key"
         }

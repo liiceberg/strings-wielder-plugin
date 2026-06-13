@@ -33,7 +33,7 @@
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <action id="StringWielder"
-                    class="com.liiceberg.StringWielder"
+                    class="com.liiceberg.ExtractStringResourcesAction"
                     text="Extract String Resources"
                     description="Helps extracting hardcoded string resources"/>
 

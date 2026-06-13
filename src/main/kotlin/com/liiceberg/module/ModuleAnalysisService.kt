@@ -1,6 +1,7 @@
 package com.liiceberg.module
 
 import com.android.tools.idea.concurrency.coroutineScope
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
@@ -47,7 +48,7 @@ class ModuleAnalysisService(private val project: Project, private val isDeepAnal
                 async {
                     entrySemaphore.withPermit {
                         ProgressManager.checkCanceled()
-                        val stringResources = runBlockingReadAction {
+                        val stringResources = ApplicationManager.getApplication().runReadAction<Set<String>> {
                             StringResourceFinder.getAccessibleResourceNames(moduleContent.module)
                         }
                         getEntries(moduleContent, stringResources)
@@ -97,10 +98,6 @@ class ModuleAnalysisService(private val project: Project, private val isDeepAnal
             }
             .awaitAll()
             .flatten()
-    }
-
-    private fun <T> runBlockingReadAction(action: () -> T): T {
-        return com.intellij.openapi.application.ApplicationManager.getApplication().runReadAction<T>(action)
     }
 
     private companion object {

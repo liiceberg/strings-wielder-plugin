@@ -21,7 +21,9 @@ class PluralDialog(
     private val fewField = JTextField()
     private val manyField = JTextField()
     private val otherField = JTextField()
-    private val currentNumberField = JTextField(PluralDetector.getNumber(entity.value))
+    private val currentNumberField = JTextField(
+        PluralDetector.getNumber(entity.value).ifBlank { DEFAULT_CURRENT_NUMBER }
+    )
 
     private val keyField = JTextField(entity.key)
 
@@ -149,3 +151,4 @@ class PluralDialog(
 
 }
 
+private const val DEFAULT_CURRENT_NUMBER = "1"

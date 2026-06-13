@@ -6,7 +6,7 @@ import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.project.DumbService
 import com.liiceberg.module.ModuleAnalysisService
 
-class StringWielder : AnAction() {
+class ExtractStringResourcesAction : AnAction() {
 
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.getData(PlatformDataKeys.PROJECT) ?: return

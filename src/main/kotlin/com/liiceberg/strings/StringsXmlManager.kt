@@ -152,9 +152,7 @@ class StringsXmlManager(
         }
 
         applyTranslatableAttribute(existingTag, translatable)
-        val tagValue = existingTag.value
-        tagValue.textElements.forEach { it.delete() }
-        tagValue.text = value.value
+        updateTagText(existingTag, value.value)
     }
 
     private fun addOrUpdatePlural(
@@ -195,15 +193,13 @@ class StringsXmlManager(
         }
 
         if (existingItem == null) {
-            val item = rootTag.createChildTag(ITEM_TAG, rootTag.namespace, value, false)
+            val item = rootTag.createChildTag(ITEM_TAG, rootTag.namespace, null, false)
             item.setAttribute(QUANTITY_TAG_ATTRIBUTE, quantity)
-            pluralTag.addSubTag(item, false)
+            updateTagText(pluralTag.addSubTag(item, false), value)
             return
         }
 
-        val tagValue = existingItem.value
-        tagValue.textElements.forEach { it.delete() }
-        tagValue.text = value
+        updateTagText(existingItem, value)
     }
 
     private fun applyTranslatableAttribute(tag: XmlTag, translatable: Boolean) {
@@ -233,6 +229,134 @@ class StringsXmlManager(
             }
         }
         return deletedCount
+    }
+
+    fun applyExistingResourceChanges(changes: List<ExistingResourceChangeRequest>): Int {
+        var updatedCount = 0
+        getResourcesFiles().forEach { file ->
+            ProgressManager.checkCanceled()
+            if (!isResourcesFile(file)) return@forEach
+
+            val updatedInFile = applyExistingResourceChangesFromFile(file, changes)
+            if (updatedInFile > 0) {
+                updatedCount += updatedInFile
+                reformatFile(file)
+            }
+        }
+        return updatedCount
+    }
+
+    private fun applyExistingResourceChangesFromFile(
+        file: XmlFile,
+        changes: List<ExistingResourceChangeRequest>,
+    ): Int {
+        var updatedCount = 0
+        WriteCommandAction.runWriteCommandAction(project) {
+            val rootTag = file.rootTag ?: return@runWriteCommandAction
+            changes.forEach { change ->
+                val updated = when (change) {
+                    is ExistingResourceChangeRequest.Template -> applyTemplateChange(rootTag, file, change)
+                    is ExistingResourceChangeRequest.Plural -> applyPluralChange(rootTag, file, change)
+                }
+                if (updated) {
+                    updatedCount += 1
+                }
+            }
+        }
+        return updatedCount
+    }
+
+    private fun applyTemplateChange(
+        rootTag: XmlTag,
+        file: XmlFile,
+        change: ExistingResourceChangeRequest.Template,
+    ): Boolean {
+        val tag = rootTag.findSubTags(STRING_TAG).firstOrNull {
+            it.getAttributeValue(NAME_TAG_ATTRIBUTE) == change.sourceKey
+        } ?: return false
+
+        val currentValue = tag.value.trimmedText
+        val updatedValue = if (file.virtualFile.path == change.baseFilePath) {
+            change.baseValue
+        } else {
+            applyTemplateFormats(currentValue, change.templateFormats) ?: currentValue
+        }
+
+        if (updatedValue == currentValue) {
+            return false
+        }
+
+        updateTagText(tag, updatedValue)
+        if (change.targetKey != change.sourceKey) {
+            tag.setAttribute(NAME_TAG_ATTRIBUTE, change.targetKey)
+        }
+        return true
+    }
+
+    private fun applyPluralChange(
+        rootTag: XmlTag,
+        file: XmlFile,
+        change: ExistingResourceChangeRequest.Plural,
+    ): Boolean {
+        val stringTag = rootTag.findSubTags(STRING_TAG).firstOrNull {
+            it.getAttributeValue(NAME_TAG_ATTRIBUTE) == change.sourceKey
+        }
+        val pluralTag = rootTag.findSubTags(PLURAL_TAG).firstOrNull {
+            it.getAttributeValue(NAME_TAG_ATTRIBUTE) == change.targetKey
+        }
+
+        if (stringTag == null && pluralTag == null) {
+            return false
+        }
+        if (file.virtualFile.path != change.baseFilePath && stringTag == null && pluralTag != null) {
+            return false
+        }
+
+        val translatable = isTranslatable(stringTag ?: pluralTag)
+        val pluralValue = if (file.virtualFile.path == change.baseFilePath) {
+            change.plural
+        } else {
+            val localizedText = stringTag?.value?.trimmedText?.takeIf { it.isNotBlank() }
+            change.plural.copy(other = localizedText ?: change.plural.other)
+        }
+
+        stringTag?.delete()
+        addOrUpdatePlural(rootTag, change.targetKey, pluralValue, translatable)
+        return true
+    }
+
+    private fun updateTagText(tag: XmlTag, value: String) {
+        tag.value.text = value
+    }
+
+    private fun isTranslatable(tag: XmlTag?): Boolean {
+        return tag?.getAttributeValue(TRANSLATABLE_TAG_ATTRIBUTE) != FALSE_ATTRIBUTE_VALUE
+    }
+
+    private fun applyTemplateFormats(value: String, templateFormats: List<String?>): String? {
+        val placeholderRanges = FORMAT_PLACEHOLDER_REGEX.findAll(value).map { it.range }.toList()
+        val rawNumbers = RAW_NUMBER_REGEX.findAll(value)
+            .filterNot { match ->
+                placeholderRanges.any { range ->
+                    match.range.first >= range.first && match.range.last <= range.last
+                }
+            }
+            .toList()
+
+        if (rawNumbers.size < templateFormats.size) {
+            return null
+        }
+
+        var result = value
+        rawNumbers.take(templateFormats.size)
+            .zip(templateFormats)
+            .asReversed()
+            .forEach { (match, format) ->
+                if (format != null) {
+                    result = result.replaceRange(match.range, format)
+                }
+            }
+        return result
     }
 
     private fun deleteResourcesFromFile(
@@ -314,6 +438,27 @@ class StringsXmlManager(
         val resourceType: ResourceType,
     )
 
+    sealed interface ExistingResourceChangeRequest {
+        val sourceKey: String
+        val targetKey: String
+        val baseFilePath: String
+
+        data class Template(
+            override val sourceKey: String,
+            override val targetKey: String,
+            override val baseFilePath: String,
+            val baseValue: String,
+            val templateFormats: List<String?>,
+        ) : ExistingResourceChangeRequest
+
+        data class Plural(
+            override val sourceKey: String,
+            override val targetKey: String,
+            override val baseFilePath: String,
+            val plural: PluralResource,
+        ) : ExistingResourceChangeRequest
+    }
+
     companion object {
         private const val RESOURCES_TAG = "resources"
         const val STRING_TAG = "string"
@@ -330,5 +475,7 @@ class StringsXmlManager(
         const val QUANTITY_MANY = "many"
         const val QUANTITY_OTHER = "other"
         private const val DEFAULT_STRINGS_XML = "<resources>\n</resources>\n"
+        private val RAW_NUMBER_REGEX = Regex("""\b\d+\b""")
+        private val FORMAT_PLACEHOLDER_REGEX = Regex("""%([0-9]\$)?[sdf]""")
     }
 }

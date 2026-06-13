@@ -42,6 +42,7 @@ class Translator {
             }
             is PluralResource -> {
                 PluralResource(
+                    zero = translateOptional(resource.zero, sourceLanguage, targetLanguage),
                     one = translateOptional(resource.one, sourceLanguage, targetLanguage),
                     few = translateOptional(resource.few, sourceLanguage, targetLanguage),
                     many = translateOptional(resource.many, sourceLanguage, targetLanguage),
