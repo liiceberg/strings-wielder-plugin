@@ -11,15 +11,6 @@ object Constants {
         const val BASE_LANGUAGE = "BASE_LANGUAGE"
     }
 
-    object Titles {
-        const val HARDCODED_STRINGS_FOUND_TABLE = "Hardcoded Strings Found"
-    }
-
-    object Labels {
-        const val INVALID_KEY_FILED = "The key can consist of letters, numbers, and _"
-        const val INVALID_KEYS_FOUND = "Attention: incorrect keys were found. Edit them before continuing."
-    }
-
     object RegexTemplates {
         val KEY_REGEX = Regex("^[a-z0-9-_]+$")
         val KEY_GENERATOR_REGEX = Regex("[^A-Za-z0-9_ ]")

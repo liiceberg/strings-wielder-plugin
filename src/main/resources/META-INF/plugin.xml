@@ -8,7 +8,7 @@
     <name>String-Wielder</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor email="aysylu2003@gmail.com" url="https://github.com/liiceberg">liiceberg</vendor>
+    <vendor email="AAGimaletdinova@stud.kpfu.ru" url="https://git.kpfu.ru/AAGimaletdinova">AAGimaletdinova</vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
@@ -33,22 +33,22 @@
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <action id="StringWielder"
-                    class="com.liiceberg.ExtractStringResourcesAction"
+                    class="com.liiceberg.action.ExtractStringResourcesAction"
                     text="Extract String Resources"
                     description="Helps extracting hardcoded string resources"/>
 
             <action id="StringWielder.TranslateExistingResources"
-                    class="com.liiceberg.TranslateExistingResourcesAction"
+                    class="com.liiceberg.action.TranslateExistingResourcesAction"
                     text="Translate Existing Resources"
                     description="Fills missing translations in existing locale resource files"/>
 
             <action id="StringWielder.AnalyzeExistingResources"
-                    class="com.liiceberg.AnalyzeExistingResourcesAction"
+                    class="com.liiceberg.action.AnalyzeExistingResourcesAction"
                     text="Analyze Existing Resources"
                     description="Finds duplicates and detects template/plural candidates in existing resources"/>
 
             <action id="StringWielder.SyncResourcesToAllAppLocales"
-                    class="com.liiceberg.SyncResourcesToAllAppLocalesAction"
+                    class="com.liiceberg.action.SyncResourcesToAllAppLocalesAction"
                     text="Sync Resources To All App Locales"
                     description="Creates missing locale files from app locale set and fills missing translations"/>
         </group>

@@ -7,10 +7,10 @@ enum class SupportedAppLanguage(
     val displayName: String,
     val mbartCode: String,
     private val androidQualifier: String,
-    val linguaLanguage: Language? = null,
+    val linguaLanguage: Language?,
     val isTranslatable: Boolean = true,
 ) {
-    NON_TRANSLATABLE("Non-translatable", "", "", isTranslatable = false),
+    NON_TRANSLATABLE("Non-translatable", "", "", null, false),
     AFRIKAANS("Afrikaans", "af_ZA", "af", Language.AFRIKAANS),
     ARABIC("Arabic", "ar_AR", "ar", Language.ARABIC),
     AZERBAIJANI("Azerbaijani", "az_AZ", "az", Language.AZERBAIJANI),
@@ -23,7 +23,6 @@ enum class SupportedAppLanguage(
     ESTONIAN("Estonian", "et_EE", "et", Language.ESTONIAN),
     FINNISH("Finnish", "fi_FI", "fi", Language.FINNISH),
     FRENCH("French", "fr_XX", "fr", Language.FRENCH),
-    GALICIAN("Galician", "gl_ES", "gl"),
     GEORGIAN("Georgian", "ka_GE", "ka", Language.GEORGIAN),
     GERMAN("German", "de_DE", "de", Language.GERMAN),
     GUJARATI("Gujarati", "gu_IN", "gu", Language.GUJARATI),
@@ -33,22 +32,16 @@ enum class SupportedAppLanguage(
     ITALIAN("Italian", "it_IT", "it", Language.ITALIAN),
     JAPANESE("Japanese", "ja_XX", "ja", Language.JAPANESE),
     KAZAKH("Kazakh", "kk_KZ", "kk", Language.KAZAKH),
-    KHMER("Khmer", "km_KH", "km"),
     KOREAN("Korean", "ko_KR", "ko", Language.KOREAN),
     LATVIAN("Latvian", "lv_LV", "lv", Language.LATVIAN),
     LITHUANIAN("Lithuanian", "lt_LT", "lt", Language.LITHUANIAN),
     MACEDONIAN("Macedonian", "mk_MK", "mk", Language.MACEDONIAN),
-    MALAYALAM("Malayalam", "ml_IN", "ml"),
     MARATHI("Marathi", "mr_IN", "mr", Language.MARATHI),
-    MYANMAR("Myanmar (Burmese)", "my_MM", "my"),
-    NEPALI("Nepali", "ne_NP", "ne"),
     PERSIAN("Persian", "fa_IR", "fa", Language.PERSIAN),
     POLISH("Polish", "pl_PL", "pl", Language.POLISH),
     PORTUGUESE("Portuguese", "pt_XX", "pt", Language.PORTUGUESE),
-    PASHTO("Pashto", "ps_AF", "ps"),
     ROMANIAN("Romanian", "ro_RO", "ro", Language.ROMANIAN),
     RUSSIAN("Russian", "ru_RU", "ru", Language.RUSSIAN),
-    SINHALA("Sinhala", "si_LK", "si"),
     SLOVENIAN("Slovenian", "sl_SI", "sl", Language.SLOVENE),
     SPANISH("Spanish", "es_XX", "es", Language.SPANISH),
     SWAHILI("Swahili", "sw_KE", "sw", Language.SWAHILI),
@@ -67,19 +60,8 @@ enum class SupportedAppLanguage(
 
     override fun toString(): String = displayName
 
-    fun matchesQualifier(languageCode: String, script: String?, region: String?): Boolean {
-        val normalizedLanguage = languageCode.lowercase(Locale.ROOT)
-        val normalizedScript = script?.lowercase(Locale.ROOT)
-        val normalizedRegion = region?.uppercase(Locale.ROOT)
-
-        return when (this) {
-            CHINESE_SIMPLIFIED -> {
-                normalizedLanguage == "zh" &&
-                    normalizedScript != "hant" &&
-                    normalizedRegion !in setOf("TW", "HK", "MO")
-            }
-            else -> normalizedLanguage == androidQualifier.substringBefore('-')
-        }
+    fun matchesQualifier(languageCode: String): Boolean {
+        return languageCode.lowercase(Locale.ROOT) == androidQualifier.substringBefore('-')
     }
 
     companion object {
@@ -96,7 +78,7 @@ enum class SupportedAppLanguage(
             .filter { it.isTranslatable }
             .sortedBy { it.displayName }
 
-        fun detectableLanguages(): Array<Language> = entries
+        val detectableLanguages: Array<Language> = entries
             .filter { it.isTranslatable }
             .mapNotNull { it.linguaLanguage }
             .distinct()
@@ -118,36 +100,24 @@ enum class SupportedAppLanguage(
             if (qualifier.startsWith(BCP47_PREFIX)) {
                 val parts = qualifier.split('+')
                 val languageCode = parts.getOrNull(1) ?: return null
-                val script = parts.getOrNull(2)?.takeIf { it.length == 4 }
-                val region = parts
-                    .drop(if (script == null) 2 else 3)
-                    .firstOrNull()
-                    ?.takeIf { it.length == 2 || it.length == 3 }
-                return findByQualifier(languageCode, script, region)
+                return findByQualifier(languageCode)
             }
 
             val segments = qualifier.split('-')
             val languageCode = segments.firstOrNull()?.takeIf { it.length == 2 } ?: return null
-            val region = segments
-                .drop(1)
-                .firstOrNull { it.startsWith(REGION_PREFIX) && it.length == 3 }
-                ?.removePrefix(REGION_PREFIX)
-            return findByQualifier(languageCode, null, region)
+            return findByQualifier(languageCode)
         }
 
         private fun findByQualifier(
             languageCode: String,
-            script: String?,
-            region: String?,
         ): SupportedAppLanguage? {
             return entries
                 .filter { it.isTranslatable }
-                .firstOrNull { it.matchesQualifier(languageCode, script, region) }
+                .firstOrNull { it.matchesQualifier(languageCode) }
         }
 
         private const val DEFAULT_VALUES_DIRECTORY_NAME = "values"
         private const val BCP47_PREFIX = "b+"
-        private const val REGION_PREFIX = "r"
     }
 }
 

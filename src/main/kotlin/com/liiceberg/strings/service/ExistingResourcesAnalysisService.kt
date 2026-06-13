@@ -1,4 +1,4 @@
-package com.liiceberg.strings.analysis
+package com.liiceberg.strings.service
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.module.Module
@@ -7,6 +7,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
 import com.intellij.psi.xml.XmlFile
 import com.intellij.psi.xml.XmlTag
+import com.liiceberg.model.StringEntity
+import com.liiceberg.model.SuggestionType
 import com.liiceberg.module.ModuleExplorer
 import com.liiceberg.module.ModuleFileFinder
 import com.liiceberg.strings.SearchUtil
@@ -22,17 +24,13 @@ import com.liiceberg.strings.StringsXmlManager.Companion.QUANTITY_ZERO
 import com.liiceberg.strings.StringsXmlManager.Companion.STRING_TAG
 import com.liiceberg.strings.translator.ResourceDirectoryLanguage
 import com.liiceberg.strings.translator.SupportedAppLanguage
-import com.liiceberg.ui.entity.HardcodedStringEntity
-import com.liiceberg.ui.entity.SuggestionType
+import com.liiceberg.utils.getSavedBaseLanguage
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 class ExistingResourcesAnalysisService(
     private val project: Project,
-    private val isDeepAnalyze: Boolean = true,
 ) {
 
     private val moduleExplorer = ModuleExplorer(project)
@@ -49,8 +47,6 @@ class ExistingResourcesAnalysisService(
         val findings = mutableListOf<ExistingResourceFinding>()
         val seenProjectEntries = mutableSetOf<ScanEntryKey>()
         var analyzedCount = 0
-
-        val semaphore = Semaphore(MAX_ENTRY_ENRICHMENT_CONCURRENCY)
 
         modules.forEach { module ->
             ProgressManager.checkCanceled()
@@ -71,11 +67,9 @@ class ExistingResourcesAnalysisService(
 
             moduleEntries.map { entry ->
                 async {
-                    semaphore.withPermit {
-                        ProgressManager.checkCanceled()
-                        val duplicates = findDuplicates(searchUtil, entry.entity.module, entry.entity.value)
-                        buildFindingOrNull(entry, duplicates)
-                    }
+                    ProgressManager.checkCanceled()
+                    val duplicates = findDuplicates(searchUtil, entry.entity.module, entry.entity.value)
+                    buildFindingOrNull(entry, duplicates)
                 }
             }.awaitAll()
                 .filterNotNull()
@@ -105,13 +99,13 @@ class ExistingResourcesAnalysisService(
                             STRING_TAG -> {
                                 val value = tag.value.trimmedText.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                                 ExistingResourceEntry(
-                                    entity = HardcodedStringEntity(
+                                    entity = StringEntity(
                                         key = key,
                                         value = value,
                                         isSelected = false,
                                         virtualFile = file.virtualFile,
                                         module = module,
-                                        sourceLanguage = null,
+                                        sourceLanguage = getSavedBaseLanguage(),
                                     ),
                                     key = key,
                                     filePath = file.virtualFile.path,
@@ -122,13 +116,13 @@ class ExistingResourcesAnalysisService(
                             PLURAL_TAG -> {
                                 val value = resolvePluralPreview(tag.findSubTags(ITEM_TAG)) ?: return@mapNotNull null
                                 ExistingResourceEntry(
-                                    entity = HardcodedStringEntity(
+                                    entity = StringEntity(
                                         key = key,
                                         value = value,
                                         isSelected = false,
                                         virtualFile = file.virtualFile,
                                         module = module,
-                                        sourceLanguage = null,
+                                        sourceLanguage = getSavedBaseLanguage(),
                                     ),
                                     key = key,
                                     filePath = file.virtualFile.path,
@@ -149,8 +143,8 @@ class ExistingResourcesAnalysisService(
     ): ExistingResourceFinding? {
         val filteredDuplicates = duplicates.filterNot { candidate ->
             candidate.module.name == entry.entity.module.name &&
-                candidate.key == entry.key &&
-                candidate.resourceType == entry.resourceType
+                    candidate.key == entry.key &&
+                    candidate.resourceType == entry.resourceType
         }
         val suggestions = mutableSetOf<SuggestionType>()
         if (filteredDuplicates.isNotEmpty()) {
@@ -210,15 +204,11 @@ class ExistingResourcesAnalysisService(
         module: Module,
         string: String,
     ): List<SearchUtil.SearchResult> {
-        return if (isDeepAnalyze) {
-            searchUtil.deepSearch(module, string, null)
-        } else {
-            searchUtil.search(module, string, null)?.let(::listOf).orEmpty()
-        }
+        return searchUtil.deepSearch(module, string, null)
     }
 
     private data class ExistingResourceEntry(
-        val entity: HardcodedStringEntity,
+        val entity: StringEntity,
         val key: String,
         val filePath: String,
         val resourceType: SearchUtil.ResourceType,
@@ -232,7 +222,6 @@ class ExistingResourcesAnalysisService(
     )
 
     companion object {
-        private const val MAX_ENTRY_ENRICHMENT_CONCURRENCY = 4
         private val RAW_NUMBER_REGEX = Regex("""\b\d+\b""")
         private val FORMAT_PLACEHOLDER_REGEX = Regex("""%([0-9]\$)?[sdf]""")
     }

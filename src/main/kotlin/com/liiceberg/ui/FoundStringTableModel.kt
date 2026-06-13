@@ -1,12 +1,12 @@
 package com.liiceberg.ui
 
 import com.liiceberg.strings.translator.SupportedAppLanguage
-import com.liiceberg.ui.entity.HardcodedStringEntity
-import com.liiceberg.ui.entity.SuggestionType
+import com.liiceberg.model.StringEntity
+import com.liiceberg.model.SuggestionType
 import javax.swing.table.AbstractTableModel
 
 class FoundStringTableModel(
-    private val entries: List<HardcodedStringEntity>,
+    private val entries: List<StringEntity>,
     private val onLanguageChanged: (Int, SupportedAppLanguage?) -> Unit = { _, _ -> },
     private val onEntryChanged: () -> Unit = {},
 ) : AbstractTableModel() {
@@ -28,7 +28,7 @@ class FoundStringTableModel(
 
     override fun getValueAt(rowIndex: Int, columnIndex: Int): Any? = when (columnIndex) {
         0 -> entries[rowIndex].key
-        1 -> entries[rowIndex].value
+        1 -> entries[rowIndex].pluralForm?.other ?: entries[rowIndex].value
         2 -> entries[rowIndex].sourceLanguage
         3 -> entries[rowIndex].isSelected
         4 -> buildSuggestionText(entries[rowIndex])
@@ -69,7 +69,7 @@ class FoundStringTableModel(
         onEntryChanged()
     }
 
-    private fun buildSuggestionText(e: HardcodedStringEntity): String {
+    private fun buildSuggestionText(e: StringEntity): String {
         val list = mutableListOf<String>()
         if (SuggestionType.PLURAL in e.suggestions) list += "🔢 plural recommended"
         if (SuggestionType.TEMPLATE in e.suggestions) list += "🧩 template detected"
@@ -77,10 +77,10 @@ class FoundStringTableModel(
         return if (list.isEmpty()) "no suggestions" else list.joinToString(", ")
     }
 
-    private fun buildActionText(e: HardcodedStringEntity): String {
+    private fun buildActionText(e: StringEntity): String {
         return when {
-            SuggestionType.PLURAL in e.suggestions -> "Apply…"
-            SuggestionType.DUPLICATE in e.suggestions -> "Review…"
+            SuggestionType.PLURAL in e.suggestions -> "Apply"
+            SuggestionType.DUPLICATE in e.suggestions -> "Review"
             SuggestionType.TEMPLATE in e.suggestions -> "Apply"
             else -> "—"
         }

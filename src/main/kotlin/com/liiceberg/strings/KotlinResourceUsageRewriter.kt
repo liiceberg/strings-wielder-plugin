@@ -5,14 +5,9 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
+import com.liiceberg.utils.addImports
 import org.jetbrains.kotlin.idea.util.isKotlinFileType
-import org.jetbrains.kotlin.psi.KtCallExpression
-import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
-import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.KtPsiFactory
-import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
-import org.jetbrains.kotlin.psi.KtValueArgument
-import org.jetbrains.kotlin.resolve.ImportPath
+import org.jetbrains.kotlin.psi.*
 
 class KotlinResourceUsageRewriter(
     private val project: Project,
@@ -52,7 +47,7 @@ class KotlinResourceUsageRewriter(
             })
 
             if (shouldAddPluralImport) {
-                addImport(psiFile, PLURAL_RESOURCE_IMPORT)
+                psiFile.addImports(listOf(PLURAL_RESOURCE_IMPORT), ktPsiFactory)
             }
         }
 
@@ -90,14 +85,15 @@ class KotlinResourceUsageRewriter(
         }
 
         val arguments = valueArguments.take(resourceArgumentIndex + 1).map(KtValueArgument::getText) + change.arguments
-        arguments[resourceArgumentIndex].replaceResourceKey(change.sourceKey, change.targetKey)?.let { targetReference ->
-            val updatedArguments = arguments.toMutableList()
-            updatedArguments[resourceArgumentIndex] = targetReference
-            return CallRewrite(
-                text = "$callee(${updatedArguments.joinToString(", ")})",
-                requiresPluralImport = false,
-            )
-        }
+        arguments[resourceArgumentIndex].replaceResourceKey(change.sourceKey, change.targetKey)
+            ?.let { targetReference ->
+                val updatedArguments = arguments.toMutableList()
+                updatedArguments[resourceArgumentIndex] = targetReference
+                return CallRewrite(
+                    text = "$callee(${updatedArguments.joinToString(", ")})",
+                    requiresPluralImport = false,
+                )
+            }
         return CallRewrite(
             text = "$callee(${arguments.joinToString(", ")})",
             requiresPluralImport = false,
@@ -122,10 +118,12 @@ class KotlinResourceUsageRewriter(
                 text = "$PLURAL_RESOURCE_CALL($pluralReference, ${change.currentNumber})",
                 requiresPluralImport = true,
             )
+
             GET_STRING_CALL -> CallRewrite(
                 text = "${buildGetQuantityStringCallee()}($pluralReference, ${change.currentNumber})",
                 requiresPluralImport = false,
             )
+
             else -> null
         }
     }
@@ -173,35 +171,13 @@ class KotlinResourceUsageRewriter(
         return parts.joinToString(".")
     }
 
-    private fun org.jetbrains.kotlin.psi.KtExpression.isResourceReference(
+    private fun KtExpression.isResourceReference(
         resourceType: String,
         key: String,
     ): Boolean {
         val parts = text.split(".")
         return parts.size >= MIN_RESOURCE_REFERENCE_PARTS &&
-            parts.takeLast(MIN_RESOURCE_REFERENCE_PARTS) == listOf(R_CLASS, resourceType, key)
-    }
-
-    private fun addImport(ktFile: KtFile, importPath: String) {
-        val existingImports = ktFile.importDirectives.map { it.text.split(' ').last() }
-        if (importPath in existingImports) {
-            return
-        }
-
-        val newImport = ktPsiFactory.createImportDirective(ImportPath.fromString(importPath))
-        val importList = ktFile.importList
-        if (importList != null) {
-            importList.addAfter(newImport, importList.lastChild)
-            return
-        }
-
-        val packageDirective = ktFile.packageDirective
-        if (packageDirective != null) {
-            ktFile.addAfter(newImport, packageDirective)
-            ktFile.addAfter(ktPsiFactory.createNewLine(), packageDirective)
-        } else {
-            ktFile.addAfter(newImport, null)
-        }
+                parts.takeLast(MIN_RESOURCE_REFERENCE_PARTS) == listOf(R_CLASS, resourceType, key)
     }
 
     private data class CallRewrite(

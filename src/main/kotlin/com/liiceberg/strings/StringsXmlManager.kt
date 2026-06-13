@@ -12,21 +12,22 @@ import com.intellij.psi.xml.XmlFile
 import com.intellij.psi.xml.XmlTag
 import com.liiceberg.model.PluralResource
 import com.liiceberg.model.Resource
+import com.liiceberg.model.StringEntity
 import com.liiceberg.model.StringResource
 import com.liiceberg.module.ModuleFileFinder
 import com.liiceberg.strings.SearchUtil.ResourceType
 import com.liiceberg.strings.translator.ResourceDirectoryLanguage
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.strings.translator.Translator
-import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 import com.liiceberg.utils.getFacet
+import com.liiceberg.utils.resolveDirectoryLanguage
 import org.jetbrains.kotlin.idea.core.util.toVirtualFile
 
 class StringsXmlManager(
     private val project: Project,
     private val module: Module,
-    private val entries: List<HardcodedStringEntity>,
+    private val entries: List<StringEntity>,
     private val baseLanguage: SupportedAppLanguage,
 ) {
 
@@ -39,7 +40,7 @@ class StringsXmlManager(
             ProgressManager.checkCanceled()
             if (!isResourcesFile(file)) return@forEach
 
-            when (val directoryLanguage = resolveDirectoryLanguage(file)) {
+            when (val directoryLanguage = file.resolveDirectoryLanguage()) {
                 ResourceDirectoryLanguage.Default -> {
                     entries.forEach { entity ->
                         ProgressManager.checkCanceled()
@@ -48,14 +49,20 @@ class StringsXmlManager(
                         }
                     }
                 }
+
                 is ResourceDirectoryLanguage.Known -> {
                     entries.forEach { entity ->
                         ProgressManager.checkCanceled()
-                        buildLocalizedResource(entity, directoryLanguage.language, onTranslationStarted)?.let { resource ->
+                        buildLocalizedResource(
+                            entity,
+                            directoryLanguage.language,
+                            onTranslationStarted
+                        )?.let { resource ->
                             addOrUpdateString(file, entity.key, resource)
                         }
                     }
                 }
+
                 ResourceDirectoryLanguage.Unsupported -> Unit
             }
 
@@ -64,7 +71,7 @@ class StringsXmlManager(
     }
 
     private suspend fun buildBaseResource(
-        entity: HardcodedStringEntity,
+        entity: StringEntity,
         onTranslationStarted: (String) -> Unit,
     ): PreparedResource {
         val resource = entity.toResource()
@@ -75,11 +82,13 @@ class StringsXmlManager(
                 resource = resource,
                 translatable = false,
             )
+
             sourceLanguage == null || sourceLanguage == baseLanguage -> PreparedResource(resource)
             !sourceLanguage.isTranslatable -> PreparedResource(
                 resource = resource,
                 translatable = false,
             )
+
             else -> {
                 onTranslationStarted("${entity.key} -> ${baseLanguage.displayName}")
                 PreparedResource(
@@ -94,7 +103,7 @@ class StringsXmlManager(
     }
 
     private suspend fun buildLocalizedResource(
-        entity: HardcodedStringEntity,
+        entity: StringEntity,
         targetLanguage: SupportedAppLanguage,
         onTranslationStarted: (String) -> Unit,
     ): Resource? {
@@ -152,7 +161,7 @@ class StringsXmlManager(
         }
 
         applyTranslatableAttribute(existingTag, translatable)
-        updateTagText(existingTag, value.value)
+        existingTag.value.text = value.value
     }
 
     private fun addOrUpdatePlural(
@@ -195,11 +204,13 @@ class StringsXmlManager(
         if (existingItem == null) {
             val item = rootTag.createChildTag(ITEM_TAG, rootTag.namespace, null, false)
             item.setAttribute(QUANTITY_TAG_ATTRIBUTE, quantity)
-            updateTagText(pluralTag.addSubTag(item, false), value)
+
+            pluralTag.addSubTag(item, false).value.text = value
+
             return
         }
 
-        updateTagText(existingItem, value)
+        existingItem.value.text = value
     }
 
     private fun applyTranslatableAttribute(tag: XmlTag, translatable: Boolean) {
@@ -231,7 +242,7 @@ class StringsXmlManager(
         return deletedCount
     }
 
-    fun applyExistingResourceChanges(changes: List<ExistingResourceChangeRequest>): Int {
+    suspend fun applyExistingResourceChanges(changes: List<ExistingResourceChangeRequest>): Int {
         var updatedCount = 0
         getResourcesFiles().forEach { file ->
             ProgressManager.checkCanceled()
@@ -246,14 +257,34 @@ class StringsXmlManager(
         return updatedCount
     }
 
-    private fun applyExistingResourceChangesFromFile(
+    private suspend fun applyExistingResourceChangesFromFile(
         file: XmlFile,
         changes: List<ExistingResourceChangeRequest>,
     ): Int {
+        val language = file.resolveDirectoryLanguage()
+        val preparedChanges = if (language is ResourceDirectoryLanguage.Known && language.language != baseLanguage) {
+            changes.map { change ->
+                when (change) {
+                    is ExistingResourceChangeRequest.Plural -> {
+                        val translatedPlural =
+                            (translator.translate(change.plural, baseLanguage, language.language) as? PluralResource)
+                                ?: change.plural
+
+                        change.copy(
+                            plural = translatedPlural
+                        )
+                    }
+
+                    else -> change
+                }
+            }
+        } else {
+            changes
+        }
         var updatedCount = 0
         WriteCommandAction.runWriteCommandAction(project) {
             val rootTag = file.rootTag ?: return@runWriteCommandAction
-            changes.forEach { change ->
+            preparedChanges.forEach { change ->
                 val updated = when (change) {
                     is ExistingResourceChangeRequest.Template -> applyTemplateChange(rootTag, file, change)
                     is ExistingResourceChangeRequest.Plural -> applyPluralChange(rootTag, file, change)
@@ -286,7 +317,8 @@ class StringsXmlManager(
             return false
         }
 
-        updateTagText(tag, updatedValue)
+        tag.value.text = updatedValue
+
         if (change.targetKey != change.sourceKey) {
             tag.setAttribute(NAME_TAG_ATTRIBUTE, change.targetKey)
         }
@@ -308,25 +340,15 @@ class StringsXmlManager(
         if (stringTag == null && pluralTag == null) {
             return false
         }
-        if (file.virtualFile.path != change.baseFilePath && stringTag == null && pluralTag != null) {
+        if (file.virtualFile.path != change.baseFilePath && stringTag == null) {
             return false
         }
 
         val translatable = isTranslatable(stringTag ?: pluralTag)
-        val pluralValue = if (file.virtualFile.path == change.baseFilePath) {
-            change.plural
-        } else {
-            val localizedText = stringTag?.value?.trimmedText?.takeIf { it.isNotBlank() }
-            change.plural.copy(other = localizedText ?: change.plural.other)
-        }
 
         stringTag?.delete()
-        addOrUpdatePlural(rootTag, change.targetKey, pluralValue, translatable)
+        addOrUpdatePlural(rootTag, change.targetKey, change.plural, translatable)
         return true
-    }
-
-    private fun updateTagText(tag: XmlTag, value: String) {
-        tag.value.text = value
     }
 
     private fun isTranslatable(tag: XmlTag?): Boolean {
@@ -411,20 +433,13 @@ class StringsXmlManager(
         }
     }
 
-    private fun resolveDirectoryLanguage(file: XmlFile): ResourceDirectoryLanguage {
-        return ApplicationManager.getApplication().runReadAction<ResourceDirectoryLanguage> {
-            val directoryName = file.virtualFile.parent?.name ?: return@runReadAction ResourceDirectoryLanguage.Unsupported
-            SupportedAppLanguage.resolveResourceDirectory(directoryName)
-        }
-    }
-
     private fun isResourcesFile(file: XmlFile): Boolean {
         return ApplicationManager.getApplication().runReadAction<Boolean> {
             file.rootTag?.name == RESOURCES_TAG
         }
     }
 
-    private fun HardcodedStringEntity.toResource(): Resource {
+    private fun StringEntity.toResource(): Resource {
         return pluralForm ?: StringResource(value)
     }
 

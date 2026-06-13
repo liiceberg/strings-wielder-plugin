@@ -3,7 +3,7 @@ package com.liiceberg.strings.translator
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-object ApiClient {
+object TranslationApiClient {
 
     private const val BASE_URL = "http://localhost:8000/"
 

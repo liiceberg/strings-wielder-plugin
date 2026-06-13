@@ -21,24 +21,15 @@ class ModuleAnalyzer(project: Project) {
     private val stringFinder = KotlinHardCodedStringFinder(project)
 
     suspend fun analyzeAllModules(): List<ModuleContent> = coroutineScope {
-        val moduleSemaphore = Semaphore(MAX_MODULE_ANALYSIS_CONCURRENCY)
         val fileSemaphore = Semaphore(MAX_FILE_ANALYSIS_CONCURRENCY)
         val modules = readAction { moduleExplorer.getAndroidModules() }
 
         modules.map { module ->
             async {
-                moduleSemaphore.withPermit {
-                    ProgressManager.checkCanceled()
-                    analyzeModule(module, fileSemaphore)
-                }
+                ProgressManager.checkCanceled()
+                analyzeModule(module, fileSemaphore)
             }
         }.awaitAll()
-    }
-
-    suspend fun analyzeModuleByName(moduleName: String): ModuleContent? {
-        val module = readAction { moduleExplorer.getModuleByName(moduleName) } ?: return null
-        val fileSemaphore = Semaphore(MAX_FILE_ANALYSIS_CONCURRENCY)
-        return analyzeModule(module, fileSemaphore)
     }
 
     private suspend fun analyzeModule(
@@ -68,7 +59,6 @@ class ModuleAnalyzer(project: Project) {
     }
 
     private companion object {
-        private const val MAX_MODULE_ANALYSIS_CONCURRENCY = 4
         private const val MAX_FILE_ANALYSIS_CONCURRENCY = 8
     }
 }

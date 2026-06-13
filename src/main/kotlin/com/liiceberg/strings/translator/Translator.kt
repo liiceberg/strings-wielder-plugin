@@ -78,7 +78,7 @@ class Translator {
 
         repeat(MAX_RETRY_ATTEMPTS) { attempt ->
             try {
-                return ApiClient.api.translate(
+                return TranslationApiClient.api.translate(
                     TranslateRequest(
                         text = text,
                         sourceLang = sourceLanguage.mbartCode,

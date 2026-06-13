@@ -3,11 +3,11 @@ package com.liiceberg.strings
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.vfs.VirtualFile
+import com.liiceberg.model.StringEntity
 import com.liiceberg.strings.detector.TemplateDetector
 import com.liiceberg.strings.translator.LanguageDetector
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.strings.translator.Translator
-import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 
 class StringResourcesProcessor(private val stringResources: Set<String>) {
@@ -18,9 +18,9 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
         virtualFile: VirtualFile,
         module: Module,
         onTranslationStarted: (String) -> Unit = {},
-    ): List<HardcodedStringEntity> {
+    ): List<StringEntity> {
         val keysToAddInStringXML = mutableListOf<String>()
-        val entries = mutableListOf<HardcodedStringEntity>()
+        val entries = mutableListOf<StringEntity>()
 
         hardcodedStrings.forEach { str ->
             ProgressManager.checkCanceled()
@@ -32,7 +32,7 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
                 keysToAddInStringXML.add(stringResourceKey)
             }
             entries.add(
-                HardcodedStringEntity(
+                StringEntity(
                     stringResourceKey,
                     str,
                     true,
@@ -83,32 +83,18 @@ class StringResourcesProcessor(private val stringResources: Set<String>) {
         sourceLanguage: SupportedAppLanguage?,
         onTranslationStarted: (String) -> Unit,
     ): String? {
-        if (!shouldTranslateToEnglish(originalText, sourceLanguage)) {
+        if (sourceLanguage == null || sourceLanguage == SupportedAppLanguage.ENGLISH) {
             return originalText
         }
-        val detectedLanguage = sourceLanguage ?: return originalText
 
         onTranslationStarted(originalText)
         return runCatching {
             translator.translate(
                 text = originalText,
-                sourceLanguage = detectedLanguage,
+                sourceLanguage = sourceLanguage,
                 targetLanguage = SupportedAppLanguage.ENGLISH,
             )
         }.getOrNull()
-    }
-
-    private fun shouldTranslateToEnglish(
-        originalText: String,
-        sourceLanguage: SupportedAppLanguage?,
-    ): Boolean {
-        if (sourceLanguage == null || sourceLanguage == SupportedAppLanguage.ENGLISH) {
-            return false
-        }
-        val letters = originalText.filter { it.isLetter() }
-        return letters.any {
-            Character.UnicodeScript.of(it.code) != Character.UnicodeScript.LATIN
-        }
     }
 
     private fun containsLetters(originalText: String): Boolean {

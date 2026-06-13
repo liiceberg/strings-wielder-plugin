@@ -1,4 +1,4 @@
-package com.liiceberg.strings.analysis
+package com.liiceberg.strings.service
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.module.Module
@@ -11,6 +11,7 @@ import com.liiceberg.strings.KotlinResourceUsageChange
 import com.liiceberg.strings.KotlinResourceUsageRewriter
 import com.liiceberg.strings.StringsXmlManager
 import com.liiceberg.strings.translator.SupportedAppLanguage
+import kotlinx.coroutines.runBlocking
 
 class ExistingResourcePatternApplyService(
     private val project: Project,
@@ -28,7 +29,7 @@ class ExistingResourcePatternApplyService(
             moduleExplorer.getAndroidModules()
         }
 
-        val updatedResourceEntries = updateResources(decisions)
+        val updatedResourceEntries = runBlocking { updateResources(decisions) }
         val changedCodeFiles = rewriteCodeUsages(modules, decisions)
 
         return ExistingResourcePatternApplyResult(
@@ -37,7 +38,7 @@ class ExistingResourcePatternApplyService(
         )
     }
 
-    private fun updateResources(decisions: List<ExistingResourcePatternDecision>): Int {
+    private suspend fun updateResources(decisions: List<ExistingResourcePatternDecision>): Int {
         var updatedResourceEntries = 0
         decisions
             .groupBy { it.moduleName }
@@ -52,19 +53,24 @@ class ExistingResourcePatternApplyService(
                 ).applyExistingResourceChanges(
                     moduleDecisions.map { decision ->
                         when (val action = decision.action) {
-                            is ExistingResourcePatternAction.Template -> StringsXmlManager.ExistingResourceChangeRequest.Template(
-                                sourceKey = decision.sourceKey,
-                                targetKey = decision.targetKey,
-                                baseFilePath = decision.filePath,
-                                baseValue = action.value,
-                                templateFormats = action.templateFormats,
-                            )
-                            is ExistingResourcePatternAction.Plural -> StringsXmlManager.ExistingResourceChangeRequest.Plural(
-                                sourceKey = decision.sourceKey,
-                                targetKey = decision.targetKey,
-                                baseFilePath = decision.filePath,
-                                plural = action.plural,
-                            )
+                            is ExistingResourcePatternAction.Template -> {
+                                StringsXmlManager.ExistingResourceChangeRequest.Template(
+                                    sourceKey = decision.sourceKey,
+                                    targetKey = decision.targetKey,
+                                    baseFilePath = decision.filePath,
+                                    baseValue = action.value,
+                                    templateFormats = action.templateFormats,
+                                )
+                            }
+
+                            is ExistingResourcePatternAction.Plural -> {
+                                StringsXmlManager.ExistingResourceChangeRequest.Plural(
+                                    sourceKey = decision.sourceKey,
+                                    targetKey = decision.targetKey,
+                                    baseFilePath = decision.filePath,
+                                    plural = action.plural,
+                                )
+                            }
                         }
                     }
                 )
@@ -84,6 +90,7 @@ class ExistingResourcePatternApplyService(
                     targetKey = decision.targetKey,
                     arguments = action.arguments,
                 )
+
                 is ExistingResourcePatternAction.Plural -> KotlinResourceUsageChange.Plural(
                     sourceKey = decision.sourceKey,
                     targetKey = decision.targetKey,

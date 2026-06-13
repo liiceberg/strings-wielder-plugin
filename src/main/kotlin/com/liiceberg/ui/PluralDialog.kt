@@ -4,16 +4,16 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.JBUI
+import com.liiceberg.model.StringEntity
 import com.liiceberg.model.PluralResource
 import com.liiceberg.strings.detector.PluralDetector
-import com.liiceberg.ui.entity.HardcodedStringEntity
 import com.liiceberg.utils.Constants
 import java.awt.*
 import javax.swing.*
 
 class PluralDialog(
     project: Project,
-    private val entity: HardcodedStringEntity
+    private val entity: StringEntity
 ) : DialogWrapper(project) {
 
     private val zeroField = JTextField()

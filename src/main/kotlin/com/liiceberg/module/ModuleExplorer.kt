@@ -21,11 +21,6 @@ class ModuleExplorer(project: Project) {
         return moduleManager.findModuleByName(name)
     }
 
-    fun isApplicationModule(module: Module): Boolean {
-        val facet = module.getFacet() ?: return false
-        return facet.configuration.isAppOrFeature
-    }
-
     private fun isAndroidModule(module: Module): Boolean {
         return module.getFacet() != null && !module.isUnitTestModule() && !module.isAndroidTestModule()
     }

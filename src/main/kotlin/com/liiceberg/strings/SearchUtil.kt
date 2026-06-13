@@ -18,6 +18,7 @@ import com.liiceberg.strings.translator.ResourceDirectoryLanguage
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.utils.getAndroidPackageName
 import com.liiceberg.utils.getResourceDependencies
+import com.liiceberg.utils.resolveDirectoryLanguage
 import me.xdrop.fuzzywuzzy.FuzzySearch
 import java.util.concurrent.ConcurrentHashMap
 
@@ -40,9 +41,6 @@ class SearchUtil(project: Project) {
     private val semanticDuplicateSearcher = SemanticDuplicateSearcher()
     private val quantityValues = listOf(QUANTITY_OTHER, QUANTITY_MANY, QUANTITY_FEW, QUANTITY_ONE, QUANTITY_ZERO)
     private val indexedResourceCache = ConcurrentHashMap<String, List<IndexedResource>>()
-    private val scopedResourceCache = ConcurrentHashMap<ResourceScopeKey, Map<String, List<SearchResult>>>()
-    private val exactSearchCache = ConcurrentHashMap<SearchRequestKey, List<SearchResult>>()
-    private val deepSearchCache = ConcurrentHashMap<SearchRequestKey, List<SearchResult>>()
 
     fun deepSearch(
         module: Module,
@@ -50,28 +48,10 @@ class SearchUtil(project: Project) {
         sourceLanguage: SupportedAppLanguage?,
     ): List<SearchResult> {
         val normalizedQuery = normalizeStringForSearch(string)
-        val cacheKey = SearchRequestKey(module.name, normalizedQuery, sourceLanguage)
-        return deepSearchCache.computeIfAbsent(cacheKey) {
-            deduplicateResults(
-                fuzzySearch(module, string, sourceLanguage) + semanticSearch(module, string, sourceLanguage)
-            )
-        }
-    }
-
-    fun search(
-        module: Module,
-        string: String,
-        sourceLanguage: SupportedAppLanguage?,
-    ): SearchResult? {
-        val normalizedQuery = normalizeStringForSearch(string)
-        val cacheKey = SearchRequestKey(module.name, normalizedQuery, sourceLanguage)
-        val cached = exactSearchCache.computeIfAbsent(cacheKey) {
-            val queries = buildSearchQueries(string, sourceLanguage)
-            queries.firstNotNullOfOrNull { query ->
-                getResources(module, query.scopes)[normalizeStringForSearch(query.text)]?.firstOrNull()
-            }?.let(::listOf).orEmpty()
-        }
-        return cached.firstOrNull()
+        return deduplicateResults(
+            fuzzySearch(module, normalizedQuery, sourceLanguage)
+                    + semanticSearch(module, normalizedQuery, sourceLanguage)
+        )
     }
 
     private fun fuzzySearch(
@@ -117,17 +97,13 @@ class SearchUtil(project: Project) {
         module: Module,
         scopes: List<ResourceDirectoryLanguage>,
     ): Map<String, List<SearchResult>> {
-        val normalizedScopes = scopes.distinct()
-        val cacheKey = ResourceScopeKey(module.name, normalizedScopes)
-        return scopedResourceCache.computeIfAbsent(cacheKey) {
-            buildMap {
-                normalizedScopes.forEach { scope ->
-                    getIndexedResources(module)
-                        .filter { it.directoryLanguage == scope }
-                        .forEach { indexed ->
-                            addResult(indexed.result)
-                        }
-                }
+        return buildMap {
+            scopes.distinct().forEach { scope ->
+                getIndexedResources(module)
+                    .filter { it.directoryLanguage == scope }
+                    .forEach { indexed ->
+                        addResult(indexed.result)
+                    }
             }
         }
     }
@@ -150,7 +126,7 @@ class SearchUtil(project: Project) {
                             .distinctBy { it.path }
                             .mapNotNull { file -> psiManager.findFile(file) as? XmlFile }
                             .flatMap { file ->
-                                val directoryLanguage = resolveDirectoryLanguage(file)
+                                val directoryLanguage = file.resolveDirectoryLanguage()
                                 if (directoryLanguage == ResourceDirectoryLanguage.Unsupported) {
                                     return@flatMap emptyList()
                                 }
@@ -158,7 +134,8 @@ class SearchUtil(project: Project) {
                                 file.rootTag?.subTags?.mapNotNull { tag ->
                                     when (tag.name) {
                                         StringsXmlManager.STRING_TAG -> {
-                                            val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) ?: return@mapNotNull null
+                                            val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE)
+                                                ?: return@mapNotNull null
                                             val value = tag.value.trimmedText
                                             value.takeIf { it.isNotBlank() }?.let {
                                                 IndexedResource(
@@ -175,7 +152,8 @@ class SearchUtil(project: Project) {
                                         }
 
                                         StringsXmlManager.PLURAL_TAG -> {
-                                            val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE) ?: return@mapNotNull null
+                                            val key = tag.getAttributeValue(StringsXmlManager.NAME_TAG_ATTRIBUTE)
+                                                ?: return@mapNotNull null
                                             resolvePluralPreview(tag.findSubTags(StringsXmlManager.ITEM_TAG))
                                                 ?.takeIf { it.isNotBlank() }
                                                 ?.let { value ->
@@ -259,13 +237,8 @@ class SearchUtil(project: Project) {
             .replace(Regex("\\s+"), " ")
             .replace('_', ' ')
             .replace('-', ' ')
-            .replace(Regex("[“”\"'.,!?]"), "")
+            .replace(Regex("\\p{Punct}"), "")
             .lowercase()
-    }
-
-    private fun resolveDirectoryLanguage(file: XmlFile): ResourceDirectoryLanguage {
-        val directoryName = file.virtualFile.parent?.name ?: return ResourceDirectoryLanguage.Unsupported
-        return SupportedAppLanguage.resolveResourceDirectory(directoryName)
     }
 
     private fun deduplicateResults(results: List<SearchResult>): List<SearchResult> {
@@ -288,17 +261,6 @@ class SearchUtil(project: Project) {
 
     private data class SearchQuery(
         val text: String,
-        val scopes: List<ResourceDirectoryLanguage>,
-    )
-
-    private data class SearchRequestKey(
-        val moduleName: String,
-        val normalizedQuery: String,
-        val sourceLanguage: SupportedAppLanguage?,
-    )
-
-    private data class ResourceScopeKey(
-        val moduleName: String,
         val scopes: List<ResourceDirectoryLanguage>,
     )
 

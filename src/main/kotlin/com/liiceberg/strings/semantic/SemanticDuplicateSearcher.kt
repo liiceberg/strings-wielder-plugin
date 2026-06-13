@@ -9,21 +9,6 @@ import java.util.concurrent.ConcurrentHashMap
 class SemanticDuplicateSearcher {
 
     private val cache = ConcurrentHashMap<SemanticComparisonKey, Boolean>()
-    @Volatile
-    private var isBatchEndpointAvailable: Boolean? = null
-
-    private fun isSemanticDuplicate(
-        text: String,
-        compareWith: String,
-    ): Boolean {
-        if (text.isBlank() || compareWith.isBlank()) return false
-        if (text == compareWith) return true
-
-        val cacheKey = SemanticComparisonKey.of(text, compareWith)
-        return cache.computeIfAbsent(cacheKey) {
-            requestSingleComparison(text, compareWith)
-        }
-    }
 
     fun findSemanticDuplicates(
         text: String,
@@ -70,6 +55,19 @@ class SemanticDuplicateSearcher {
         return matches
     }
 
+    private fun isSemanticDuplicate(
+        text: String,
+        compareWith: String,
+    ): Boolean {
+        if (text.isBlank() || compareWith.isBlank()) return false
+        if (text == compareWith) return true
+
+        val cacheKey = SemanticComparisonKey.of(text, compareWith)
+        return cache.computeIfAbsent(cacheKey) {
+            requestSingleComparison(text, compareWith)
+        }
+    }
+
     private fun requestSingleComparison(
         text: String,
         compareWith: String,
@@ -93,7 +91,6 @@ class SemanticDuplicateSearcher {
         text: String,
         compareWith: List<String>,
     ): Map<String, Boolean> {
-        if (isBatchEndpointAvailable == false) return emptyMap()
 
         val result = runCatching {
             SemanticDuplicateApiClient.api.compareBatch(
@@ -105,17 +102,8 @@ class SemanticDuplicateSearcher {
         }.getOrNull()
 
         return when {
-            result == null -> emptyMap()
-            !result.isSuccessful -> {
-                if (result.code() == 404) {
-                    isBatchEndpointAvailable = false
-                }
-                emptyMap()
-            }
-            else -> {
-                isBatchEndpointAvailable = true
-                parseBatchResponse(result.body())
-            }
+            result == null || !result.isSuccessful -> emptyMap()
+            else -> parseBatchResponse(result.body())
         }
     }
 
@@ -147,5 +135,4 @@ class SemanticDuplicateSearcher {
             }
         }
     }
-
 }

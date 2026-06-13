@@ -4,9 +4,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
+import com.liiceberg.model.StringEntity
 import com.liiceberg.strings.detector.Pattern
 import com.liiceberg.strings.detector.PatternType
-import com.liiceberg.ui.entity.HardcodedStringEntity
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Dimension
@@ -19,7 +19,7 @@ import javax.swing.text.StyledDocument
 
 class TemplateConfirmDialog(
     project: Project,
-    private val entity: HardcodedStringEntity,
+    private val entity: StringEntity,
 ) : DialogWrapper(project) {
 
     data class TemplateArgument(

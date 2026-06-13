@@ -1,4 +1,4 @@
-package com.liiceberg.strings.analysis
+package com.liiceberg.strings.service
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.module.Module
@@ -10,6 +10,7 @@ import com.liiceberg.strings.KotlinResourceReferenceReplacement
 import com.liiceberg.strings.KotlinResourceReferenceReplacer
 import com.liiceberg.strings.SearchUtil
 import com.liiceberg.strings.StringsXmlManager
+import com.liiceberg.strings.translator.SupportedAppLanguage
 
 class ExistingResourceDuplicateMergeService(
     private val project: Project,
@@ -30,15 +31,18 @@ class ExistingResourceDuplicateMergeService(
             decision.resourcesToRemove.all { it.resourceType == decision.keepResource.resourceType }
         }
         val replacedFiles = replaceCodeReferences(modules, compatibleDecisions)
-        val deletedResources = deleteMergedResources(compatibleDecisions)
+        deleteMergedResources(compatibleDecisions)
 
         return DuplicateMergeResult(
             replacedFiles = replacedFiles,
             deletedResources = compatibleDecisions
                 .flatMap { it.resourcesToRemove }
-                .distinctBy { listOf(it.moduleName, it.key, it.resourceType.name).joinToString("|") }
+                .distinctBy {  Triple(
+                    it.moduleName,
+                    it.key,
+                    it.resourceType
+                ) }
                 .size,
-            deletedResourceEntries = deletedResources,
             skippedDecisions = decisions.size - compatibleDecisions.size,
         )
     }
@@ -84,7 +88,7 @@ class ExistingResourceDuplicateMergeService(
                     project = project,
                     module = module,
                     entries = emptyList(),
-                    baseLanguage = com.liiceberg.strings.translator.SupportedAppLanguage.ENGLISH,
+                    baseLanguage = SupportedAppLanguage.ENGLISH,
                 ).deleteResources(
                     resources.map { resource ->
                         StringsXmlManager.ResourceDeletionRequest(
@@ -113,6 +117,5 @@ data class DuplicateResourceRef(
 data class DuplicateMergeResult(
     val replacedFiles: Int = 0,
     val deletedResources: Int = 0,
-    val deletedResourceEntries: Int = 0,
     val skippedDecisions: Int = 0,
 )

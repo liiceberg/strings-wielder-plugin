@@ -6,7 +6,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
 import com.liiceberg.strings.SearchUtil
-import com.liiceberg.ui.entity.HardcodedStringEntity
+import com.liiceberg.model.StringEntity
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.GridBagConstraints
@@ -16,7 +16,7 @@ import javax.swing.border.TitledBorder
 
 class DuplicateDialog(
     project: Project,
-    private val entity: HardcodedStringEntity,
+    private val entity: StringEntity,
 ) : DialogWrapper(project) {
 
     private val buttonGroup = ButtonGroup()

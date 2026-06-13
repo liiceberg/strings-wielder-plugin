@@ -13,12 +13,12 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
+import com.liiceberg.model.StringEntity
+import com.liiceberg.model.SuggestionType
 import com.liiceberg.strings.SearchUtil
 import com.liiceberg.strings.StringResourceReplacer
 import com.liiceberg.strings.detector.PatternType
 import com.liiceberg.strings.translator.SupportedAppLanguage
-import com.liiceberg.ui.entity.HardcodedStringEntity
-import com.liiceberg.ui.entity.SuggestionType
 import com.liiceberg.utils.Constants
 import com.liiceberg.utils.LocalStorage
 import kotlinx.coroutines.runBlocking
@@ -32,8 +32,7 @@ import javax.swing.table.TableCellRenderer
 
 class FoundStringDialog(
     private val project: Project,
-    private val entries: List<HardcodedStringEntity>,
-    private val isDeepAnalyze: Boolean = true,
+    private val entries: List<StringEntity>,
     private val searchUtil: SearchUtil = SearchUtil(project),
 ) : DialogWrapper(project) {
 
@@ -44,15 +43,15 @@ class FoundStringDialog(
         SupportedAppLanguage.baseLanguageValues.toTypedArray()
     ).apply {
         selectedItem = getSavedBaseLanguage()
-        preferredSize = Dimension(220, preferredSize.height)
-        maximumSize = Dimension(220, preferredSize.height)
+        preferredSize = Dimension(180, preferredSize.height)
+        maximumSize = Dimension(200, preferredSize.height)
     }
     private val errorLabel = JLabel("").apply {
         foreground = JBColor.RED
     }
 
     init {
-        title = Constants.Titles.HARDCODED_STRINGS_FOUND_TABLE
+        title = "Hardcoded Strings Found"
         tableModel.addTableModelListener {
             refreshValidationError()
         }
@@ -98,7 +97,7 @@ class FoundStringDialog(
 
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
-        panel.minimumSize = Dimension(800, 600)
+        panel.minimumSize = Dimension(1000, 600)
 
         errorLabel.border = BorderFactory.createEmptyBorder(5, 10, 5, 10)
         val controlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
@@ -137,7 +136,7 @@ class FoundStringDialog(
                 }
                 cellEditor = DefaultCellEditor(
                     JComboBox(
-                        arrayOf<SupportedAppLanguage?>(
+                        arrayOf(
                             null,
                             *SupportedAppLanguage.dropdownValues.toTypedArray()
                         )
@@ -187,7 +186,10 @@ class FoundStringDialog(
                 cellEditor = DefaultCellEditor(checkBoxEditor)
             }
 
-            stringsTable.columnModel.getColumn(4).cellRenderer = SuggestionCellRenderer()
+            stringsTable.columnModel.getColumn(4).apply {
+                minWidth = 180
+                cellRenderer = SuggestionCellRenderer()
+            }
 
             stringsTable.columnModel.getColumn(5).apply {
                 cellRenderer = ActionButtonRenderer()
@@ -204,7 +206,7 @@ class FoundStringDialog(
                     val shouldValidateKey = col == 0 && entity?.isSelected == true && entity.existingResource == null
 
                     return if (shouldValidateKey && !value.matches(Constants.RegexTemplates.KEY_REGEX)) {
-                        errorLabel.text = Constants.Labels.INVALID_KEY_FILED
+                        errorLabel.text = "The key can consist of letters, numbers, and _"
                         false
                     } else {
                         refreshValidationError()
@@ -277,27 +279,18 @@ class FoundStringDialog(
     }
 
     private fun findDuplicates(
-        entity: HardcodedStringEntity,
+        entity: StringEntity,
         sourceLanguage: SupportedAppLanguage?,
     ): List<SearchUtil.SearchResult> {
-
-        return if (isDeepAnalyze) {
-            searchUtil.deepSearch(
-                module = entity.module,
-                string = entity.value,
-                sourceLanguage = sourceLanguage,
-            )
-        } else {
-            searchUtil.search(
-                module = entity.module,
-                string = entity.value,
-                sourceLanguage = sourceLanguage,
-            )?.let(::listOf).orEmpty()
-        }
+        return searchUtil.deepSearch(
+            module = entity.module,
+            string = entity.value,
+            sourceLanguage = sourceLanguage,
+        )
     }
 
     private fun applyDuplicateState(
-        entity: HardcodedStringEntity,
+        entity: StringEntity,
         duplicates: List<SearchUtil.SearchResult>,
     ) {
         entity.duplicateOf = duplicates.ifEmpty { null }
@@ -310,9 +303,9 @@ class FoundStringDialog(
         entity.existingResource?.let { selected ->
             val selectedStillAvailable = duplicates.any {
                 it.module.name == selected.module.name &&
-                    it.packageName == selected.packageName &&
-                    it.key == selected.key &&
-                    it.resourceType == selected.resourceType
+                        it.packageName == selected.packageName &&
+                        it.key == selected.key &&
+                        it.resourceType == selected.resourceType
             }
             if (!selectedStillAvailable) {
                 entity.existingResource = null
@@ -323,8 +316,8 @@ class FoundStringDialog(
     private fun validateEntries(): Boolean {
         val hasInvalidSelectedEntries = entries.any { entry ->
             entry.isSelected &&
-                entry.existingResource == null &&
-                !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
+                    entry.existingResource == null &&
+                    !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
         }
         refreshValidationError()
         return !hasInvalidSelectedEntries
@@ -333,14 +326,16 @@ class FoundStringDialog(
     private fun refreshValidationError() {
         val hasInvalidSelectedEntries = entries.any { entry ->
             entry.isSelected &&
-                entry.existingResource == null &&
-                !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
+                    entry.existingResource == null &&
+                    !entry.key.matches(Constants.RegexTemplates.KEY_REGEX)
         }
 
-        errorLabel.text = if (hasInvalidSelectedEntries) Constants.Labels.INVALID_KEYS_FOUND else ""
+        errorLabel.text = if (hasInvalidSelectedEntries) {
+            "Attention: incorrect keys were found. Edit them before continuing."
+        } else ""
     }
 
-    private fun buildTemplateResourceValue(entity: HardcodedStringEntity): String {
+    private fun buildTemplateResourceValue(entity: StringEntity): String {
         val templatePatterns = entity.patterns
             .filter { it.type == PatternType.TEMPLATE }
             .sortedByDescending { it.range.first }
@@ -356,10 +351,6 @@ class FoundStringDialog(
         return result
     }
 
-    private companion object {
-        const val UNKNOWN_LANGUAGE_LABEL = "Unknown / choose manually"
-    }
-
     private fun getSavedBaseLanguage(): SupportedAppLanguage {
         val savedName = LocalStorage.getData(Constants.Preferences.BASE_LANGUAGE)
         return savedName
@@ -369,3 +360,6 @@ class FoundStringDialog(
     }
 
 }
+
+private const val UNKNOWN_LANGUAGE_LABEL = "Unknown / choose manually"
+

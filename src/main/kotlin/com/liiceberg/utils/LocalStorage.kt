@@ -5,8 +5,9 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 
 @State(
-        name = Constants.Preferences.LOCAL_STORAGE,
-        storages = [Storage(Constants.Preferences.STRING_WIELDER_PREFERENCES)])
+    name = Constants.Preferences.LOCAL_STORAGE,
+    storages = [Storage(Constants.Preferences.STRING_WIELDER_PREFERENCES)]
+)
 object LocalStorage : PersistentStateComponent<LocalStorage.State> {
 
     object State {

@@ -12,12 +12,12 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
 import com.liiceberg.model.PluralResource
+import com.liiceberg.model.StringEntity
+import com.liiceberg.model.SuggestionType
 import com.liiceberg.strings.SearchUtil
-import com.liiceberg.strings.analysis.*
 import com.liiceberg.strings.detector.Pattern
 import com.liiceberg.strings.detector.PatternType
-import com.liiceberg.ui.entity.HardcodedStringEntity
-import com.liiceberg.ui.entity.SuggestionType
+import com.liiceberg.strings.service.*
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.GridBagConstraints
@@ -78,42 +78,43 @@ class ExistingResourcesAnalysisDialog(
             Messages.showInfoMessage(project, "No changes selected to apply.", "String-Wielder")
             return
         }
+        super.doOKAction()
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Applying existing resource changes", true) {
-            override fun run(indicator: ProgressIndicator) {
-                indicator.text = "Applying duplicate merges"
-                val duplicateResult = ExistingResourceDuplicateMergeService(project).apply(duplicateDecisions)
-                indicator.text = "Applying template and plural changes"
-                val patternResult = ExistingResourcePatternApplyService(project).apply(patternDecisions)
-                indicator.text = "Existing resource changes completed"
+        ProgressManager.getInstance()
+            .run(object : Task.Backgroundable(project, "Applying existing resource changes", true) {
+                override fun run(indicator: ProgressIndicator) {
+                    indicator.text = "Applying duplicate merges"
+                    val duplicateResult = ExistingResourceDuplicateMergeService(project).apply(duplicateDecisions)
+                    indicator.text = "Applying template and plural changes"
+                    val patternResult = ExistingResourcePatternApplyService(project).apply(patternDecisions)
+                    indicator.text = "Existing resource changes completed"
 
-                SwingUtilities.invokeLater {
-                    Messages.showInfoMessage(
+                    SwingUtilities.invokeLater {
+                        Messages.showInfoMessage(
+                            project,
+                            "Updated ${duplicateResult.replacedFiles + patternResult.changedCodeFiles} code files, " +
+                                    "changed ${patternResult.updatedResourceEntries} resource entries and " +
+                                    "deleted ${duplicateResult.deletedResources} resources." +
+                                    skippedMessage(duplicateResult.skippedDecisions),
+                            "String-Wielder",
+                        )
+                    }
+                }
+
+                override fun onThrowable(error: Throwable) {
+                    Messages.showErrorDialog(
                         project,
-                        "Updated ${duplicateResult.replacedFiles + patternResult.changedCodeFiles} code files, " +
-                            "changed ${patternResult.updatedResourceEntries} resource entries and " +
-                            "deleted ${duplicateResult.deletedResources} resources." +
-                            skippedMessage(duplicateResult.skippedDecisions),
+                        error.message ?: "Failed to apply existing resource changes.",
                         "String-Wielder",
                     )
-                    close(OK_EXIT_CODE)
                 }
-            }
-
-            override fun onThrowable(error: Throwable) {
-                Messages.showErrorDialog(
-                    project,
-                    error.message ?: "Failed to apply existing resource changes.",
-                    "String-Wielder",
-                )
-            }
-        })
+            })
     }
 
     private fun buildSummary(): String {
         return "Analyzed ${report.analyzedCount} resources. " +
-            "Found ${report.findings.size} issues " +
-            "(duplicates: ${report.duplicateCount}, templates: ${report.templateCount}, plurals: ${report.pluralCount})."
+                "Found ${report.findings.size} issues " +
+                "(duplicates: ${report.duplicateCount}, templates: ${report.templateCount}, plurals: ${report.pluralCount})."
     }
 
     private fun createDuplicatesPanel(groups: List<DuplicateGroup>): JComponent {
@@ -194,9 +195,9 @@ class ExistingResourcesAnalysisDialog(
         val packagePart = item.packageName?.let { " | Package: $it" }.orEmpty()
         return JLabel(
             "<html><b>${escapeHtml(item.key)}</b> (${item.resourceType.name.lowercase()})" +
-                " | Module: ${escapeHtml(item.moduleName)}$packagePart<br>" +
-                escapeHtml(item.value) +
-                "</html>"
+                    " | Module: ${escapeHtml(item.moduleName)}$packagePart<br>" +
+                    escapeHtml(item.value) +
+                    "</html>"
         )
     }
 
@@ -233,8 +234,8 @@ class ExistingResourcesAnalysisDialog(
 
         val info = JLabel(
             "<html>${finding.resourceType.name.lowercase()} | Module: ${escapeHtml(finding.moduleName)}<br>" +
-                escapeHtml(finding.value) +
-                "</html>"
+                    escapeHtml(finding.value) +
+                    "</html>"
         )
 
         val buttons = JPanel().apply {
@@ -306,7 +307,7 @@ class ExistingResourcesAnalysisDialog(
         }
     }
 
-    private fun createEntity(finding: ExistingResourceFinding): HardcodedStringEntity? {
+    private fun createEntity(finding: ExistingResourceFinding): StringEntity? {
         val module = moduleManager.findModuleByName(finding.moduleName)
         val virtualFile = LocalFileSystem.getInstance().findFileByPath(finding.filePath)
 
@@ -319,7 +320,7 @@ class ExistingResourcesAnalysisDialog(
             return null
         }
 
-        return HardcodedStringEntity(
+        return StringEntity(
             key = finding.key,
             value = finding.value,
             isSelected = false,
@@ -414,6 +415,7 @@ class ExistingResourcesAnalysisDialog(
                     templateFormats = selection.templateFormats,
                     arguments = selection.arguments,
                 )
+
                 is PatternActionSelection.Plural -> ExistingResourcePatternAction.Plural(
                     plural = selection.plural,
                 )
@@ -456,7 +458,7 @@ class ExistingResourcesAnalysisDialog(
             .toList()
     }
 
-    private fun buildTemplateResourceValue(entity: HardcodedStringEntity): String {
+    private fun buildTemplateResourceValue(entity: StringEntity): String {
         var result = entity.sourceValue
         entity.patterns
             .filter { it.type == PatternType.TEMPLATE }

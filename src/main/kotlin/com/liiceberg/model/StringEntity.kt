@@ -1,13 +1,12 @@
-package com.liiceberg.ui.entity
+package com.liiceberg.model
 
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.vfs.VirtualFile
-import com.liiceberg.model.PluralResource
 import com.liiceberg.strings.SearchUtil
 import com.liiceberg.strings.detector.Pattern
 import com.liiceberg.strings.translator.SupportedAppLanguage
 
-data class HardcodedStringEntity(
+data class StringEntity(
     var key: String,
     var value: String,
     var isSelected: Boolean,

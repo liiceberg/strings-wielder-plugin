@@ -7,21 +7,21 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiManager
+import com.liiceberg.model.StringEntity
 import com.liiceberg.strings.SearchUtil.ResourceType
 import com.liiceberg.strings.detector.Pattern
 import com.liiceberg.strings.detector.PatternType
 import com.liiceberg.strings.translator.SupportedAppLanguage
-import com.liiceberg.ui.entity.HardcodedStringEntity
+import com.liiceberg.utils.addImports
 import com.liiceberg.utils.getAndroidPackageName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
-import org.jetbrains.kotlin.resolve.ImportPath
 
 class StringResourceReplacer(
     private val project: Project,
-    private val entries: List<HardcodedStringEntity>,
+    private val entries: List<StringEntity>,
     private val baseLanguage: SupportedAppLanguage,
 ) {
 
@@ -44,7 +44,7 @@ class StringResourceReplacer(
                 psiManager.findFile(file) as? KtFile
             }
             psiFile?.let {
-                addImports(importsList, it)
+                it.addImports(importsList, ktPsiFactory)
                 val stringsToReplace = buildMap {
                     entityList.forEach { entity ->
                         put(entity.sourceValue, entity)
@@ -56,7 +56,7 @@ class StringResourceReplacer(
         updateStringXMLFile(onTranslationStarted)
     }
 
-    private fun replaceInKotlinFile(stringsToReplace: Map<String, HardcodedStringEntity>, ktFile: KtFile) {
+    private fun replaceInKotlinFile(stringsToReplace: Map<String, StringEntity>, ktFile: KtFile) {
         WriteCommandAction.runWriteCommandAction(project) {
             ktFile.accept(object : KtTreeVisitorVoid() {
                 override fun visitStringTemplateExpression(expression: KtStringTemplateExpression) {
@@ -72,31 +72,6 @@ class StringResourceReplacer(
                     }
                 }
             })
-        }
-    }
-
-    private fun addImports(imports: List<String>, ktFile: KtFile) {
-        WriteCommandAction.runWriteCommandAction(project) {
-            val existingImports = ktFile.importDirectives.map { it.text.split(' ').last() }
-            imports.forEach { currentImport ->
-                if (currentImport !in existingImports) {
-                    val newImport = ktPsiFactory.createImportDirective(
-                        ImportPath.fromString(currentImport)
-                    )
-                    val importList = ktFile.importList
-                    if (importList != null) {
-                        importList.addAfter(newImport, importList.lastChild)
-                    } else {
-                        val packageDirective = ktFile.packageDirective
-                        if (packageDirective != null) {
-                            ktFile.addAfter(newImport, packageDirective)
-                            ktFile.addAfter(ktPsiFactory.createNewLine(), packageDirective)
-                        } else {
-                            ktFile.addAfter(newImport, null)
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -116,7 +91,7 @@ class StringResourceReplacer(
         }
     }
 
-    private fun buildResourceAccess(entity: HardcodedStringEntity): String {
+    private fun buildResourceAccess(entity: StringEntity): String {
         val resourceReference = resolveResourceReference(entity)
         if (resourceReference.resourceType == ResourceType.PLURAL) {
             val number = entity.pluralForm?.currentNumber ?: 1
@@ -135,11 +110,11 @@ class StringResourceReplacer(
         }
     }
 
-    private fun shouldUsePluralAccess(entity: HardcodedStringEntity): Boolean {
+    private fun shouldUsePluralAccess(entity: StringEntity): Boolean {
         return resolveResourceReference(entity).resourceType == ResourceType.PLURAL
     }
 
-    private fun resolveResourceReference(entity: HardcodedStringEntity): ResourceReference {
+    private fun resolveResourceReference(entity: StringEntity): ResourceReference {
         entity.existingResource?.let { existing ->
             return ResourceReference(
                 key = existing.key,
@@ -171,7 +146,7 @@ class StringResourceReplacer(
         }
     }
 
-    private fun buildResourceValue(entity: HardcodedStringEntity): String {
+    private fun buildResourceValue(entity: StringEntity): String {
         val templatePatterns = entity.patterns
             .filter { it.type == PatternType.TEMPLATE }
             .sortedByDescending { it.range.first }
@@ -187,7 +162,7 @@ class StringResourceReplacer(
         return result
     }
 
-    private fun resolveFinalResourceValue(entity: HardcodedStringEntity): String {
+    private fun resolveFinalResourceValue(entity: StringEntity): String {
         return if (entity.value != entity.sourceValue) {
             entity.value
         } else {
@@ -195,7 +170,7 @@ class StringResourceReplacer(
         }
     }
 
-    private fun buildTemplateArguments(entity: HardcodedStringEntity): List<String> {
+    private fun buildTemplateArguments(entity: StringEntity): List<String> {
         return entity.patterns
             .filter { it.type == PatternType.TEMPLATE }
             .sortedBy { it.range.first }

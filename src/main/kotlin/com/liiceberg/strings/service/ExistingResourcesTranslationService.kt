@@ -1,4 +1,4 @@
-package com.liiceberg.strings
+package com.liiceberg.strings.service
 
 import com.android.tools.idea.ui.resourcemanager.importer.getOrCreateDefaultResDirectory
 import com.intellij.openapi.application.ApplicationManager
@@ -15,12 +15,13 @@ import com.liiceberg.model.Resource
 import com.liiceberg.model.StringResource
 import com.liiceberg.module.ModuleExplorer
 import com.liiceberg.module.ModuleFileFinder
+import com.liiceberg.strings.StringsXmlManager
 import com.liiceberg.strings.translator.ResourceDirectoryLanguage
 import com.liiceberg.strings.translator.SupportedAppLanguage
 import com.liiceberg.strings.translator.Translator
 import com.liiceberg.utils.Constants
-import com.liiceberg.utils.LocalStorage
 import com.liiceberg.utils.getFacet
+import com.liiceberg.utils.getSavedBaseLanguage
 import org.jetbrains.kotlin.idea.core.util.toVirtualFile
 
 class ExistingResourcesTranslationService(
@@ -122,7 +123,7 @@ class ExistingResourcesTranslationService(
         }.toSet()
 
         appLocales
-            .filter { it.isTranslatable && it !in existingLanguages }
+            .filter { it !in existingLanguages }
             .forEach { language ->
                 ensureLocalizedStringsFile(module, language)?.let { file ->
                     existingFiles += LocalizedXmlFile(
@@ -378,14 +379,6 @@ class ExistingResourcesTranslationService(
     private fun resolveDirectoryLanguage(file: XmlFile): ResourceDirectoryLanguage {
         val directoryName = file.virtualFile.parent?.name ?: return ResourceDirectoryLanguage.Unsupported
         return SupportedAppLanguage.resolveResourceDirectory(directoryName)
-    }
-
-    private fun getSavedBaseLanguage(): SupportedAppLanguage {
-        val savedName = LocalStorage.getData(Constants.Preferences.BASE_LANGUAGE)
-        return savedName
-            ?.let { runCatching { SupportedAppLanguage.valueOf(it) }.getOrNull() }
-            ?.takeIf { it.isTranslatable }
-            ?: SupportedAppLanguage.ENGLISH
     }
 
     private data class BaseResourceEntry(
